@@ -1,0 +1,10 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers.dart';
+import '../../shared/widgets.dart';
+class PrinterSettingsPage extends ConsumerStatefulWidget {const PrinterSettingsPage({super.key});@override ConsumerState<PrinterSettingsPage> createState()=>_PrinterSettingsPageState();}
+class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage>{bool logo=true,summary=true,color=true;String orientation='portrait';
+@override void initState(){super.initState();_load();}
+Future<void> _load()async{final r=ref.read(repositoryProvider);logo=(await r.getSetting('print_logo')??'1')=='1';summary=(await r.getSetting('print_summary')??'1')=='1';color=(await r.getSetting('print_color')??'1')=='1';orientation=await r.getSetting('print_orientation')??'portrait';if(mounted)setState((){});}
+Future<void> _set(String k,String v)=>ref.read(repositoryProvider).setSetting(k,v);
+@override Widget build(BuildContext context)=>Scaffold(appBar:const AppHeader(title:'خيارات الطباعة'),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:Column(children:[SwitchListTile(value:logo,onChanged:(v){setState(()=>logo=v);_set('print_logo',v?'1':'0');},title:const Text('إظهار الشعار')),const Divider(height:1),SwitchListTile(value:summary,onChanged:(v){setState(()=>summary=v);_set('print_summary',v?'1':'0');},title:const Text('إظهار الملخص')),const Divider(height:1),SwitchListTile(value:color,onChanged:(v){setState(()=>color=v);_set('print_color',v?'1':'0');},title:const Text('طباعة ملونة'))])),const SizedBox(height:12),Card(child:Padding(padding:const EdgeInsets.all(16),child:DropdownButtonFormField<String>(initialValue:orientation,items:const[DropdownMenuItem(value:'portrait',child:Text('عمودي A4')),DropdownMenuItem(value:'landscape',child:Text('أفقي A4'))],onChanged:(v){if(v!=null){setState(()=>orientation=v);_set('print_orientation',v);}},decoration:const InputDecoration(labelText:'اتجاه الطباعة'))))]));}
