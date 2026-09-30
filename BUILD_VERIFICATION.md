@@ -11,3 +11,5 @@ GitHub Actions is configured to run:
 The workflow uploads the resulting debug APK as a workflow artifact.
 
 Latest requested UI fixes: startup splash artwork, base-currency account totals, and enlarged/repositioned PDF logo/title header.
+
+Final verification: native Android PdfDocument statement viewer, full Word HTML export, and Google Drive backup integration.
