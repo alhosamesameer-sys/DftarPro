@@ -148,7 +148,8 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
   }
 
   Widget _accountField() {
-    final data = ref.watch(accountsProvider(accountSearch.text.trim()));
+    final queryText = accountSearch.text.trim();
+    final data = queryText.isEmpty ? null : ref.read(repositoryProvider).accounts(query: queryText);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       TextField(
         controller: accountSearch,
@@ -162,12 +163,18 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
           suffixIcon: account != null ? const Icon(Icons.check_circle, color: Colors.green) : const Icon(Icons.search),
         ),
       ),
-      if (!editing && showAccountSuggestions)
-        data.when(
-          loading: () => const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator()),
-          error: (e, s) => Padding(padding: const EdgeInsets.all(8), child: Text('تعذر البحث: ' + e.toString())),
-          data: (items) {
-            final query = accountSearch.text.trim().toLowerCase();
+      if (!editing && showAccountSuggestions && queryText.isNotEmpty)
+        FutureBuilder<List<Account>>(
+          future: data,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Padding(padding: const EdgeInsets.all(8), child: Text('تعذر البحث: ' + snapshot.error.toString()));
+            }
+            final query = queryText.toLowerCase();
+            final items = snapshot.data ?? const <Account>[];
             final filtered = items.where((a) => a.name.toLowerCase().contains(query)).take(6).toList();
             return Card(
               child: Column(children: [
@@ -179,11 +186,11 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
                     subtitle: Text(a.phone.isEmpty ? 'حساب' : a.phone),
                     onTap: () => _selectAccount(a),
                   )),
-                if (filtered.isEmpty || !filtered.any((a) => a.name.toLowerCase() == query))
+                if (filtered.isEmpty)
                   ListTile(
                     leading: const Icon(Icons.person_add_alt_1),
                     title: const Text('إضافة عميل جديد', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(query.isEmpty ? 'إنشاء حساب جديد' : 'لا يوجد عميل باسم «' + accountSearch.text.trim() + '»'),
+                    subtitle: Text('لا يوجد عميل باسم «' + queryText + '»'),
                     onTap: _addCustomerFromTransaction,
                   ),
               ]),
@@ -192,7 +199,6 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
         ),
     ]);
   }
-
   void _selectAccount(Account a) {
     setState(() {
       account = a.id;
