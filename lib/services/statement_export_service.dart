@@ -123,6 +123,10 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
     await SharePlus.instance.share(ShareParams(files:[XFile(file.path,mimeType:'application/pdf')],text:'كشف حساب ${account.name}'));
   }
 
+  Future<void> openStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
+    await buildPdf(account, items, balance, profile: profile).then((_) => _nativePdf.invokeMethod('openStatementPdf', {'account': _accountMap(account), 'profile': profile ?? const <String,String>{}, 'transactions': items.map(_txMap).toList(), 'balance': balance}));
+  }
+
   Future<void> printStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
     final bytes = await buildPdf(account, items, balance, profile: profile);
     await Printing.layoutPdf(onLayout: (_) async => bytes, name:'كشف_حساب_${account.id}.pdf');
