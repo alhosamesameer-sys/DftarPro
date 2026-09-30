@@ -1,17 +1,32 @@
 package com.example.ledgerpro
 
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
-import java.net.URLEncoder
-import io.flutter.embedding.android.FlutterActivity
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
+import android.text.TextPaint
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URLEncoder
+import java.util.Locale
 
-class MainActivity : FlutterActivity() {
-    private val channel = "dftar/whatsapp"
+class MainActivity : FlutterFragmentActivity() {
+    private val whatsappChannel = "dftar/whatsapp"
+    private val pdfChannel = "dftar/native_pdf"
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel).setMethodCallHandler { call, result ->
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, whatsappChannel).setMethodCallHandler { call, result ->
             if (call.method != "openWhatsApp") { result.notImplemented(); return@setMethodCallHandler }
             val phone = call.argument<String>("phone") ?: ""
             val text = call.argument<String>("text") ?: ""
@@ -19,12 +34,169 @@ class MainActivity : FlutterActivity() {
             if (phone.isBlank()) { result.success(false); return@setMethodCallHandler }
             try {
                 val pkg = if (business) "com.whatsapp.w4b" else "com.whatsapp"
-                val url = "https://wa.me/$phone?text=${URLEncoder.encode(text, "UTF-8")}"
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setPackage(pkg) }
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent); result.success(true)
-                } else result.success(false)
+                val encoded = URLEncoder.encode(text, "UTF-8")
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + phone + "?text=" + encoded)).apply { setPackage(pkg) }
+                if (intent.resolveActivity(packageManager) != null) { startActivity(intent); result.success(true) } else result.success(false)
             } catch (_: Exception) { result.success(false) }
         }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pdfChannel).setMethodCallHandler { call, result ->
+            if (call.method != "createStatementPdf") { result.notImplemented(); return@setMethodCallHandler }
+            try {
+                val account = call.argument<Map<String, Any?>>("account") ?: emptyMap()
+                val profile = call.argument<Map<String, Any?>>("profile") ?: emptyMap()
+                val transactions = call.argument<List<Map<String, Any?>>>("transactions") ?: emptyList()
+                val balance = (call.argument<Number>("balance") ?: 0).toDouble()
+                result.success(createStatementPdf(account, profile, transactions, balance))
+            } catch (e: Exception) {
+                result.error("PDF_ERROR", e.message, null)
+            }
+        }
+    }
+
+    private fun money(value: Double): String = String.format(Locale.US, "%.2f", value)
+
+    private fun drawText(canvas: Canvas, text: String, x: Float, y: Float, size: Float, color: Int, bold: Boolean, align: Paint.Align) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.textSize = size
+        p.color = color
+        p.textAlign = align
+        p.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        canvas.drawText(text, x, y, p)
+    }
+
+    private fun drawRtl(canvas: Canvas, text: String, right: Float, top: Float, width: Int, size: Float, color: Int, bold: Boolean) {
+        if (text.isBlank()) return
+        val p = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        p.textSize = size
+        p.color = color
+        p.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, p, width)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setIncludePad(false)
+            .setTextDirection(TextDirectionHeuristics.RTL)
+            .build()
+        canvas.save()
+        canvas.translate(right - width, top)
+        layout.draw(canvas)
+        canvas.restore()
+    }
+
+    private fun createStatementPdf(account: Map<String, Any?>, profile: Map<String, Any?>, transactions: List<Map<String, Any?>>, balance: Double): String {
+        val document = PdfDocument()
+        val width = 595
+        val height = 842
+        val margin = 34f
+        val green = Color.rgb(8, 127, 91)
+        val dark = Color.rgb(25, 40, 36)
+        val light = Color.rgb(244, 248, 246)
+        val border = Color.rgb(205, 216, 211)
+        val white = Color.WHITE
+
+        var pageNumber = 0
+        var page: PdfDocument.Page? = null
+        var canvas: Canvas? = null
+        var y = 0f
+
+        fun startPage() {
+            pageNumber += 1
+            page = document.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
+            canvas = page!!.canvas
+            canvas!!.drawColor(white)
+            val owner = profile["user_name"]?.toString().orEmpty().ifBlank { "سمير الحسامي" }
+            val address = profile["address_ar"]?.toString().orEmpty()
+            drawText(canvas!!, owner, width - margin, margin + 20, 13f, dark, true, Paint.Align.RIGHT)
+            drawText(canvas!!, address, width - margin, margin + 39, 9f, dark, false, Paint.Align.RIGHT)
+            drawText(canvas!!, "كشف حساب", width / 2f, margin + 62, 20f, dark, true, Paint.Align.CENTER)
+            canvas!!.drawLine(margin, margin + 78, width - margin, margin + 78, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = dark; strokeWidth = 1.5f })
+            y = margin + 98
+        }
+
+        fun finishPage() { page?.let { document.finishPage(it) }; page = null; canvas = null }
+        fun ensure(space: Float) { if (y + space > height - 42) { finishPage(); startPage() } }
+
+        startPage()
+
+        val accountName = account["name"]?.toString().orEmpty()
+        val accountPhone = account["phone"]?.toString().orEmpty()
+        val accountAddress = account["address"]?.toString().orEmpty()
+        val base = profile["base_currency"]?.toString().orEmpty().ifBlank {
+            transactions.firstOrNull()?.get("baseCurrency")?.toString() ?: "YER"
+        }
+
+        drawRtl(canvas!!, "العميل: " + accountName, width - margin, y, width - (margin * 2).toInt(), 11f, dark, true)
+        y += 25
+        drawRtl(canvas!!, "الهاتف: " + if (accountPhone.isBlank()) "—" else accountPhone, width - margin, y, width - (margin * 2).toInt(), 10f, dark, false)
+        y += 23
+        drawRtl(canvas!!, "العنوان: " + if (accountAddress.isBlank()) "—" else accountAddress, width - margin, y, width - (margin * 2).toInt(), 10f, dark, false)
+        y += 35
+
+        val credit = transactions.filter { it["type"]?.toString() == "credit" }.sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
+        val debit = transactions.filter { it["type"]?.toString() == "debit" }.sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
+        val netLabel = if (balance >= 0) "له" else "عليه"
+
+        canvas!!.drawRect(margin, y, width - margin, y + 62, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
+        canvas!!.drawRect(margin, y, width - margin, y + 62, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
+        drawText(canvas!!, "إجمالي الرصيد الحالي", width / 2f, y + 21, 11f, dark, true, Paint.Align.CENTER)
+        drawText(canvas!!, money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, width / 2f, y + 48, 17f, green, true, Paint.Align.CENTER)
+        y += 76
+
+        drawText(canvas!!, "إجمالي له: " + money(credit) + " " + base, width - margin, y + 18, 9f, dark, true, Paint.Align.RIGHT)
+        drawText(canvas!!, "إجمالي عليه: " + money(debit) + " " + base, width - margin, y + 38, 9f, dark, true, Paint.Align.RIGHT)
+        y += 58
+
+        drawText(canvas!!, "سجل العمليات", width - margin, y, 14f, green, true, Paint.Align.RIGHT)
+        y += 10
+
+        val rowHeight = 46f
+        canvas!!.drawRect(margin, y, width - margin, y + 28, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = green })
+        drawText(canvas!!, "التاريخ", 86f, y + 19, 8f, white, true, Paint.Align.CENTER)
+        drawText(canvas!!, "العملية", 205f, y + 19, 8f, white, true, Paint.Align.CENTER)
+        drawText(canvas!!, "المبلغ / المعادل", 380f, y + 19, 8f, white, true, Paint.Align.CENTER)
+        drawText(canvas!!, "الرصيد", 515f, y + 19, 8f, white, true, Paint.Align.CENTER)
+        y += 28
+
+        var running = 0.0
+        transactions.forEachIndexed { index, item ->
+            ensure(rowHeight)
+            if (index % 2 == 0) canvas!!.drawRect(margin, y, width - margin, y + rowHeight, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
+            canvas!!.drawRect(margin, y, width - margin, y + rowHeight, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
+
+            val amount = (item["amount"] as? Number)?.toDouble() ?: 0.0
+            val baseAmount = (item["baseAmount"] as? Number)?.toDouble() ?: 0.0
+            val type = item["type"]?.toString() ?: "credit"
+            running += if (type == "credit") baseAmount else -baseAmount
+            val date = item["date"]?.toString()?.take(10)?.replace("-", "/") ?: ""
+            val note = item["note"]?.toString().orEmpty().ifBlank { item["category"]?.toString() ?: "عملية" }
+            val currency = item["currency"]?.toString() ?: base
+
+            drawText(canvas!!, date, 86f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
+            drawText(canvas!!, note.take(20), 205f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
+            drawText(canvas!!, money(amount) + " " + currency, 380f, y + 19, 7.5f, dark, false, Paint.Align.CENTER)
+            drawText(canvas!!, money(baseAmount) + " " + base, 380f, y + 34, 6.5f, dark, false, Paint.Align.CENTER)
+            drawText(canvas!!, money(running) + " " + base, 515f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
+            y += rowHeight
+        }
+
+        if (transactions.isEmpty()) {
+            drawText(canvas!!, "لا توجد عمليات مسجلة", width / 2f, y + 25, 10f, dark, false, Paint.Align.CENTER)
+            y += 45
+        }
+
+        ensure(70f)
+        y += 10
+        canvas!!.drawRect(margin, y, width - margin, y + 58, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
+        canvas!!.drawRect(margin, y, width - margin, y + 58, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
+        drawText(canvas!!, "إجمالي له: " + money(credit) + " " + base, width - margin - 8, y + 19, 9f, dark, true, Paint.Align.RIGHT)
+        drawText(canvas!!, "إجمالي عليه: " + money(debit) + " " + base, width - margin - 8, y + 38, 9f, dark, true, Paint.Align.RIGHT)
+        drawText(canvas!!, "الصافي: " + money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, margin + 8, y + 31, 9f, green, true, Paint.Align.LEFT)
+
+        finishPage()
+        val dir = File(cacheDir, "statements")
+        dir.mkdirs()
+        val file = File(dir, "statement_" + System.currentTimeMillis() + ".pdf")
+        FileOutputStream(file).use { document.writeTo(it) }
+        document.close()
+        return file.absolutePath
     }
 }
