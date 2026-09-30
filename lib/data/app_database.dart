@@ -33,12 +33,18 @@ class AppDatabase {
     });
     return _db!;
   }
-  Future<List<Account>> accounts({String query='',String? type})async{
-    final d=await db; final rows=await d.query('accounts',orderBy:'updated_at DESC');
-    var list=rows.map(Account.fromMap).toList();
-    if(query.trim().isNotEmpty){final q=query.trim().toLowerCase();list=list.where((a)=>a.name.toLowerCase().contains(q)||a.phone.contains(q)).toList();}
-    if(type!=null&&type!='all')list=list.where((a)=>a.type==type).toList();
-    return list;
+  Future<List<Account>> accounts({String query='',String? type}) async {
+    final d=await db;
+    final where=<String>[];
+    final args=<Object?>[];
+    if(query.trim().isNotEmpty){
+      where.add('(name LIKE ? OR phone LIKE ? OR company_name LIKE ?)');
+      final q='%${query.trim()}%';
+      args.addAll([q,q,q]);
+    }
+    if(type!=null&&type!='all'){where.add('account_type=?');args.add(type);}
+    final rows=await d.query('accounts',where:where.isEmpty?null:where.join(' AND '),whereArgs:args,orderBy:'updated_at DESC');
+    return rows.map(Account.fromMap).toList();
   }
   Future<Account?> account(String id)async{final d=await db;final r=await d.query('accounts',where:'id=?',whereArgs:[id],limit:1);return r.isEmpty?null:Account.fromMap(r.first);}
   Future<String> saveAccount({String? id,required String name,String phone='',String company='',String address='',String notes='',required String type,required String currency,String? image})async{
