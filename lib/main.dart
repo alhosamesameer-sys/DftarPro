@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/constants/app_constants.dart';
@@ -50,7 +51,7 @@ class LedgerApp extends ConsumerWidget{const LedgerApp({super.key});
   GoRoute(path:'/settings/other',builder:(_,__)=>const OtherSettingsPage()),
   GoRoute(path:'/support',builder:(_,__)=>const SupportPage()),
  ]);
- return MaterialApp.router(title:AppConstants.appName,debugShowCheckedModeBanner:false,theme:AppTheme.light(),darkTheme:AppTheme.dark(),themeMode:ref.watch(themeModeProvider),locale:const Locale('ar'),supportedLocales:const[Locale('ar'),Locale('en')],localizationsDelegates:const[DefaultMaterialLocalizations.delegate,DefaultWidgetsLocalizations.delegate,GlobalCupertinoLocalizations.delegate],routerConfig:router,builder:(context,child)=>Directionality(textDirection:TextDirection.rtl,child:child!));
+ return MaterialApp.router(title:AppConstants.appName,debugShowCheckedModeBanner:false,theme:AppTheme.light(),darkTheme:AppTheme.dark(),themeMode:ref.watch(themeModeProvider),locale:const Locale('ar'),supportedLocales:const[Locale('ar'),Locale('en')],localizationsDelegates:const[GlobalMaterialLocalizations.delegate,GlobalWidgetsLocalizations.delegate,GlobalCupertinoLocalizations.delegate],routerConfig:router,builder:(context,child)=>Directionality(textDirection:TextDirection.rtl,child:child!));
 }}
 class AppShell extends ConsumerWidget{
  final int index;final Widget child;
