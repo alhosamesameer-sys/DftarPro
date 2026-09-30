@@ -20,9 +20,35 @@ class LedgerRepository {
   Future<Map<String,double>> accountTotals(String id,String currency)=>db.accountTotals(id,currency);
   Future<Map<String,double>> accountBaseTotals(String id,String baseCurrency)=>db.accountBaseTotals(id,baseCurrency);
   Future<Map<String,double>> dashboardTotals(String currency)=>db.dashboardTotals(currency);
-  Future<String> saveTransaction({required String accountId,required String type,required double amount,required String currency,double rate=1,required String category,DateTime? date,String note='',String? parentId})=>db.saveTransaction(accountId:accountId,type:type,amount:amount,currency:currency,rate:rate,category:category,date:date,note:note,parentId:parentId);
+  Future<String> saveTransaction({required String accountId,required String type,required double amount,required String currency,double rate=1,required String category,DateTime? date,String note='',String? parentId}) async {
+    final base=await db.getSetting('base_currency')??'YER';
+    var effective=rate;
+    if(currency!=base && (effective<=0 || effective==1)){
+      final direct=await db.latestRate(currency,base);
+      if(direct!=null&&direct>0) effective=direct;
+      else {
+        final reverse=await db.latestRate(base,currency);
+        if(reverse!=null&&reverse>0) effective=1/reverse;
+      }
+    }
+    return db.saveTransaction(accountId:accountId,type:type,amount:amount,currency:currency,rate:effective,category:category,date:date,note:note,parentId:parentId);
+  }
   Future<TransactionItem?> transaction(String id) async { final database=await db.db; final rows=await database.query('transactions',where:'id=? AND deleted=0',whereArgs:[id],limit:1); return rows.isEmpty?null:TransactionItem.fromMap(rows.first); }
-  Future<void> updateTransaction({required String id,required String accountId,required String type,required double amount,required String currency,required double rate,required String category,required DateTime date,required String note}) async { final database=await db.db; await database.update('transactions',{'account_id':accountId,'type':type,'amount':amount,'currency':currency,'base_amount':amount*rate,'base_currency':await db.getSetting('base_currency')??'YER','exchange_rate':rate,'category':category,'date':date.millisecondsSinceEpoch,'updated_at':DateTime.now().millisecondsSinceEpoch,'note':note},where:'id=?',whereArgs:[id]); }
+  Future<void> updateTransaction({required String id,required String accountId,required String type,required double amount,required String currency,required double rate,required String category,required DateTime date,required String note}) async {
+    final database=await db.db;
+    final base=await db.getSetting('base_currency')??'YER';
+    var effective=rate;
+    if(currency!=base && (effective<=0 || effective==1)){
+      final direct=await db.latestRate(currency,base);
+      if(direct!=null&&direct>0)effective=direct;
+      else {
+        final reverse=await db.latestRate(base,currency);
+        if(reverse!=null&&reverse>0)effective=1/reverse;
+      }
+    }
+    if(currency==base)effective=1;
+    await database.update('transactions',{'account_id':accountId,'type':type,'amount':amount,'currency':currency,'base_amount':amount*effective,'base_currency':base,'exchange_rate':effective,'category':category,'date':date.millisecondsSinceEpoch,'updated_at':DateTime.now().millisecondsSinceEpoch,'note':note},where:'id=?',whereArgs:[id]);
+  }
   Future<void> deleteTransaction(String id) async { final database=await db.db; await database.update('transactions',{'deleted':1,'updated_at':DateTime.now().millisecondsSinceEpoch},where:'id=?',whereArgs:[id]); }
   Future<void> addAttachment(String transactionId,String path,String name,String mime,int size)=>db.addAttachment(transactionId,path,name,mime,size);
   Future<List<CurrencyModel>> currencies()=>db.currencies();
