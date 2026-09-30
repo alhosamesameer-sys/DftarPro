@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../domain/models.dart';
@@ -110,11 +112,47 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
   Map<String, Object?> _txMap(TransactionItem e) => {'id':e.id,'type':e.type,'amount':e.amount,'currency':e.currency,'baseAmount':e.baseAmount,'baseCurrency':e.baseCurrency,'category':e.category,'note':e.note,'date':_date(e.date)};
 
   Future<Uint8List> buildPdf(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
-    final path = await _nativePdf.invokeMethod<String>('createStatementPdf', {'account':_accountMap(account),'profile':profile ?? const <String,String>{},'transactions':items.map(_txMap).toList(),'balance':balance});
-    if (path == null || path.isEmpty) throw StateError('تعذر إنشاء ملف PDF');
-    return File(path).readAsBytes();
+    final pdf = pw.Document();
+    final p = profile ?? const <String, String>{};
+    final base = p['base_currency']?.trim().isNotEmpty == true ? p['base_currency']!.trim() : (items.isNotEmpty ? items.first.baseCurrency : account.currency);
+    final credit = items.where((e) => e.type == 'credit').fold<double>(0, (s, e) => s + e.baseAmount);
+    final debit = items.where((e) => e.type == 'debit').fold<double>(0, (s, e) => s + e.baseAmount);
+    final owner = p['user_name']?.trim().isNotEmpty == true ? p['user_name']!.trim() : 'دفتر Pro';
+    final generated = _date(DateTime.now());
+    pdf.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, textDirection: pw.TextDirection.rtl, margin: const pw.EdgeInsets.all(28), build: (context) => [
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text(owner, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+        pw.Text('كشف حساب', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+      ]),
+      pw.SizedBox(height: 12),
+      pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(border: pw.Border.all()), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+        pw.Text('العميل: ' + account.name, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+        pw.Text('الهاتف: ' + (account.phone.isEmpty ? '—' : account.phone)),
+        pw.Text('العنوان: ' + (account.address.isEmpty ? '—' : account.address)),
+      ])),
+      pw.SizedBox(height: 12),
+      pw.Row(children: [
+        pw.Expanded(child: _pdfSummary('له', _money(credit), base)),
+        pw.SizedBox(width: 6),
+        pw.Expanded(child: _pdfSummary('عليه', _money(debit), base)),
+        pw.SizedBox(width: 6),
+        pw.Expanded(child: _pdfSummary(balance >= 0 ? 'الصافي له' : 'الصافي عليه', _money(balance.abs()), base)),
+      ]),
+      pw.SizedBox(height: 14),
+      pw.Text('سجل العمليات', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 6),
+      pw.TableHelper.fromTextArray(headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300), border: pw.TableBorder.all(), cellAlignment: pw.Alignment.center, headers: const ['التاريخ', 'التفاصيل', 'النوع', 'المبلغ الأصلي', 'ما يعادله بالأساسية'], data: items.isEmpty ? [['—', 'لا توجد عمليات', '—', '—', '—']] : items.map((e) => [_date(e.date), e.note.trim().isEmpty ? e.category : e.note, e.type == 'credit' ? 'له' : e.type == 'debit' ? 'عليه' : 'دفع', _money(e.amount) + ' ' + e.currency, _money(e.baseAmount) + ' ' + e.baseCurrency]).toList()),
+      pw.SizedBox(height: 12),
+      pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('تاريخ الإصدار: ' + generated, style: const pw.TextStyle(fontSize: 9))),
+    ]));
+    return pdf.save();
   }
 
+  pw.Widget _pdfSummary(String title, String value, String currency) => pw.Container(padding: const pw.EdgeInsets.all(8), decoration: pw.BoxDecoration(border: pw.Border.all()), child: pw.Column(children: [
+    pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+    pw.SizedBox(height: 3),
+    pw.Text(value + ' ' + currency, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  ]));
   Future<void> share(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
     final bytes = await buildPdf(account, items, balance, profile: profile);
     final dir = await getTemporaryDirectory();
