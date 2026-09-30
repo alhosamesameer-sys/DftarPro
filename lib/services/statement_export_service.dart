@@ -39,7 +39,7 @@ class StatementExportService {
     final ownerEn = p['user_name_en']?.trim().isNotEmpty == true ? p['user_name_en']!.trim() : 'Sameer Alhosami';
     final ownerPhone = p['phone']?.trim() ?? '';
     final logo = await _logoDataUri(p['logo_path'] ?? '');
-    final logoHtml = logo.isEmpty ? '<img class="logo" src="data:image/jpeg;base64,$_logoB64" alt="logo">' : '<img class="logo" src="$logo" alt="logo">';
+    final logoHtml = logo.isEmpty ? '<div class="logo-mark"><span>+</span><b>−</b></div>' : '<img class="logo" src="$logo" alt="logo">';
 
     final rows = items.map((e) {
       final note = e.note.trim().isEmpty ? (e.category.trim().isEmpty ? 'عملية' : e.category.trim()) : e.note.trim();
@@ -64,7 +64,7 @@ table { border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt; }
 .center { width:24%; text-align:center; }
 .ar { width:38%; text-align:right; font-size:14pt; font-weight:bold; }
 .logo { width:54px; height:54px; object-fit:contain; }
-.logo-fallback { display:inline-block; width:54px; height:54px; line-height:54px; border:1px solid #ddd; color:#777; font-size:10pt; }
+.logo-mark { display:inline-block; width:54px; height:54px; line-height:54px; border:2px solid #009688; border-radius:10px; color:#009688; font-size:20pt; font-weight:bold; text-align:center; } .logo-mark b { color:#d9534f; margin-left:4px; }
 .small { font-size:9pt; font-weight:normal; }
 .title { text-align:center; font-size:20pt; font-weight:bold; padding:9px 0; }
 .box { width:100%; border:1.5px solid #222; margin-top:8px; }
