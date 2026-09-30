@@ -18,7 +18,7 @@ class AppDatabase {
       await db.execute('CREATE TABLE invoices(id TEXT PRIMARY KEY,number TEXT,account_id TEXT,date INTEGER,total REAL,paid REAL,currency TEXT,notes TEXT)');
       await db.execute('CREATE TABLE invoice_items(id TEXT PRIMARY KEY,invoice_id TEXT,name TEXT,quantity REAL,price REAL,discount REAL,tax REAL)');
       await db.execute('CREATE TABLE attachments(id TEXT PRIMARY KEY,transaction_id TEXT,path TEXT,name TEXT,mime TEXT,size INTEGER,created_at INTEGER)');
-      await db.execute('CREATE TABLE sync_queue(id TEXT PRIMARY KEY,entity_type TEXT,entity_id TEXT,action TEXT,payload TEXT,created_at INTEGER,retry_count INTEGER,status TEXT,last_error TEXT)');
+      await db.execute('CREATE TABLE sync_queue(id TEXT PRIMARY KEY, entity_type TEXT, entity_id TEXT, action TEXT, payload TEXT, created_at INTEGER, retry_count INTEGER DEFAULT 0, status TEXT, last_error TEXT)');
       await db.execute('CREATE TABLE activity_log(id TEXT PRIMARY KEY,action TEXT,entity_id TEXT,description TEXT,created_at INTEGER)');
       await db.execute('CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT)');
       await db.insert('currencies',{'code':'YER','name':'ريال يمني','symbol':'﷼','decimals':0,'is_base':1});
