@@ -3,4 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets.dart';
 
-class CurrenciesPage extends ConsumerWidget{const CurrenciesPage({super.key});@override Widget build(BuildContext context,WidgetRef ref){final data=ref.watch(currenciesProvider);return Scaffold(appBar:const AppHeader(title:'العملات وأسعار الصرف'),body:data.when(loading:()=>const Center(child:CircularProgressIndicator()),error:(e,s)=>Center(child:Text('$e')),data:(items)=>ListView(padding:const EdgeInsets.all(16),children:[const Text('العملة الأساسية',style:TextStyle(fontWeight:FontWeight.bold)),const SizedBox(height:8),...items.map((x)=>Card(child:ListTile(title:Text(x.name),subtitle:Text(x.code),trailing:Text(x.symbol)))),const SizedBox(height:12),FilledButton.icon(onPressed:(){showDialog(context:context,builder:(c){final code=TextEditingController(),name=TextEditingController(),symbol=TextEditingController();return AlertDialog(title:const Text('إضافة عملة'),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:code,decoration:const InputDecoration(labelText:'الرمز')),TextField(controller:name,decoration:const InputDecoration(labelText:'الاسم')),TextField(controller:symbol,decoration:const InputDecoration(labelText:'الرمز المختصر'))]),actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('إلغاء')),FilledButton(onPressed:()async{if(code.text.isEmpty||name.text.isEmpty)return;await ref.read(repositoryProvider).addCurrency(code.text.trim().toUpperCase(),name.text.trim(),symbol.text.trim(),2);ref.invalidate(currenciesProvider);if(c.mounted)Navigator.pop(c);},child:const Text('حفظ'))]});},icon:const Icon(Icons.add),label:const Text('إضافة عملة'))]));}}
+class CurrenciesPage extends ConsumerWidget{
+ const CurrenciesPage({super.key});
+ @override Widget build(BuildContext context,WidgetRef ref){
+  final data=ref.watch(currenciesProvider);
+  return Scaffold(appBar:const AppHeader(title:'العملات وأسعار الصرف'),body:data.when(
+   loading:()=>const Center(child:CircularProgressIndicator()),
+   error:(e,s)=>Center(child:Text(e.toString())),
+   data:(items)=>ListView(padding:const EdgeInsets.all(16),children:[
+    const Text('العملات',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+    for(final x in items) Card(child:ListTile(title:Text(x.name),subtitle:Text(x.code),trailing:Text(x.symbol))),
+    const SizedBox(height:12),FilledButton.icon(onPressed:()=>_add(context,ref),icon:const Icon(Icons.add),label:const Text('إضافة عملة')),
+   ])));
+ }
+ Future<void> _add(BuildContext context,WidgetRef ref)async{
+  final code=TextEditingController(),name=TextEditingController(),symbol=TextEditingController();
+  await showDialog<void>(context:context,builder:(c)=>AlertDialog(title:const Text('إضافة عملة'),content:Column(mainAxisSize:MainAxisSize.min,children:[
+   TextField(controller:code,decoration:const InputDecoration(labelText:'الرمز')),TextField(controller:name,decoration:const InputDecoration(labelText:'الاسم')),TextField(controller:symbol,decoration:const InputDecoration(labelText:'الرمز المختصر')),
+  ]),actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('إلغاء')),FilledButton(onPressed:()async{if(code.text.trim().isEmpty||name.text.trim().isEmpty)return;await ref.read(repositoryProvider).addCurrency(code.text.trim().toUpperCase(),name.text.trim(),symbol.text.trim(),2);ref.invalidate(currenciesProvider);if(c.mounted)Navigator.pop(c);},child:const Text('حفظ'))]));
+  code.dispose();name.dispose();symbol.dispose();
+ }
+}
