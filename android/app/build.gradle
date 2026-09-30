@@ -8,6 +8,7 @@ android {
     compileSdk 36
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17; coreLibraryDesugaringEnabled true }
     kotlinOptions { jvmTarget = '17' }
+    buildFeatures { buildConfig true }
     defaultConfig { applicationId 'com.example.dftar'; minSdk 24; targetSdk 36; versionCode 3; versionName '1.0.2' }
     signingConfigs { release { storeFile file(System.getProperty('user.home') + '/.android/debug.keystore'); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' } }
     buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false; shrinkResources false } }
