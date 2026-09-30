@@ -127,24 +127,6 @@ class GoogleDriveBackupService {
     return decoded;
   }
 
-  Future<void> scheduleAutoBackup() async {
-    if (!Platform.isAndroid) return;
-    final enabled = (await database.getSetting('backup_auto') ?? '0') == '1';
-    if (!enabled) {
-      try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {}
-      return;
-    }
-    final configured = await database.getSetting('backup_time') ?? '02:00';
-    final parts = configured.split(':');
-    if (parts.length != 2) return;
-    final hour = int.tryParse(parts[0]);
-    final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null) return;
-    try {
-      await _alarmChannel.invokeMethod('scheduleDailyBackup', {'hour': hour, 'minute': minute});
-    } catch (_) {}
-  }
-
   Future<bool> _online() async {
     final results = await Connectivity().checkConnectivity();
     return results.any((r) => r != ConnectivityResult.none);
@@ -231,6 +213,24 @@ class BackupCoordinator {
     _timer?.cancel();
     _timer = null;
     _running = false;
+  }
+
+  Future<void> scheduleAutoBackup() async {
+    if (!Platform.isAndroid) return;
+    final enabled = (await database.getSetting('backup_auto') ?? '0') == '1';
+    if (!enabled) {
+      try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {}
+      return;
+    }
+    final configured = await database.getSetting('backup_time') ?? '02:00';
+    final parts = configured.split(':');
+    if (parts.length != 2) return;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return;
+    try {
+      await _alarmChannel.invokeMethod('scheduleDailyBackup', {'hour': hour, 'minute': minute});
+    } catch (_) {}
   }
 
   Future<bool> _online() async {
