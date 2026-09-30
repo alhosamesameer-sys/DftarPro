@@ -127,6 +127,24 @@ class GoogleDriveBackupService {
     return decoded;
   }
 
+  Future<void> scheduleAutoBackup() async {
+    if (!Platform.isAndroid) return;
+    final enabled = (await database.getSetting('backup_auto') ?? '0') == '1';
+    if (!enabled) {
+      try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {}
+      return;
+    }
+    final configured = await database.getSetting('backup_time') ?? '02:00';
+    final parts = configured.split(':');
+    if (parts.length != 2) return;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return;
+    try {
+      await _alarmChannel.invokeMethod('scheduleDailyBackup', {'hour': hour, 'minute': minute});
+    } catch (_) {}
+  }
+
   Future<bool> _online() async {
     final results = await Connectivity().checkConnectivity();
     return results.any((r) => r != ConnectivityResult.none);
@@ -185,6 +203,7 @@ class BackupNotificationService {
 class BackupCoordinator {
   final AppDatabase database;
   final Connectivity _connectivity = Connectivity();
+  static const MethodChannel _alarmChannel = MethodChannel('dftar/backup_alarm');
   late final GoogleDriveBackupService drive;
   final BackupNotificationService notifications = BackupNotificationService();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
@@ -202,6 +221,7 @@ class BackupCoordinator {
       if (results.any((r) => r != ConnectivityResult.none)) checkAndBackup();
     });
     _timer = Timer.periodic(const Duration(minutes: 1), (_) => _checkScheduledTime());
+    await scheduleAutoBackup();
     await checkAndBackup();
   }
 
@@ -304,6 +324,7 @@ class BackupCoordinator {
   }
 
   Future<void> disconnect() async {
+    if (Platform.isAndroid) { try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {} }
     await drive.disconnect();
     await database.setSetting('backup_last_status', '');
   }
