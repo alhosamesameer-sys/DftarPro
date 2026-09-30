@@ -1,7 +1,9 @@
 package com.example.ledgerpro
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.RectF
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -107,7 +109,16 @@ class MainActivity : FlutterFragmentActivity() {
             val address = profile["address_ar"]?.toString().orEmpty()
             drawText(canvas!!, owner, width - margin, margin + 20, 13f, dark, true, Paint.Align.RIGHT)
             drawText(canvas!!, address, width - margin, margin + 39, 9f, dark, false, Paint.Align.RIGHT)
-            drawText(canvas!!, "كشف حساب", width / 2f, margin + 62, 20f, dark, true, Paint.Align.CENTER)
+            val logoPath = profile["logo_path"]?.toString().orEmpty()
+            val logo = if (logoPath.isNotBlank()) BitmapFactory.decodeFile(logoPath) else BitmapFactory.decodeResource(resources, R.drawable.app_icon)
+            if (logo != null && logo.width > 0 && logo.height > 0) {
+                val max = 86f
+                val scale = minOf(max / logo.width.toFloat(), max / logo.height.toFloat())
+                val lw = logo.width * scale
+                val lh = logo.height * scale
+                canvas!!.drawBitmap(logo, null, RectF(width / 2f - lw / 2f, margin + 1f, width / 2f + lw / 2f, margin + 1f + lh), Paint(Paint.ANTI_ALIAS_FLAG))
+            }
+            drawText(canvas!!, "كشف حساب", width / 2f, margin + 104, 20f, dark, true, Paint.Align.CENTER)
             canvas!!.drawLine(margin, margin + 78, width - margin, margin + 78, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = dark; strokeWidth = 1.5f })
             y = margin + 98
         }
