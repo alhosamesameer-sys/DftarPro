@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:path_provider/path_provider.dart';
@@ -22,7 +20,7 @@ class BackupService {
 }
 
 class StatementPdfService {
-  Future<pw.Font> _arabicFont() async { final encoded=await rootBundle.loadString('assets/fonts/NotoNaskhArabic-Regular.ttf.b64'); final bytes=base64Decode(encoded.replaceAll(RegExp(r'\s+'),'')); return pw.Font.ttf(ByteData.sublistView(Uint8List.fromList(bytes))); }
+  Future<pw.Font> _arabicFont() async => pw.Font.helvetica();
   String _date(DateTime d)=>'${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
   Future<Uint8List> build(Account account,List<TransactionItem> items,double balance,{Map<String,String>? profile}) async {
     final font=await _arabicFont(); final doc=pw.Document(); final p=profile??const <String,String>{}; final base=items.isNotEmpty?items.first.baseCurrency:(p['base_currency']??'YER');
