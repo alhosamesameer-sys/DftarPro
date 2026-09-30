@@ -3,17 +3,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets.dart';
 
-class SecuritySettingsPage extends ConsumerStatefulWidget {const SecuritySettingsPage({super.key});@override ConsumerState<SecuritySettingsPage> createState()=>_SecuritySettingsPageState();}
-class _SecuritySettingsPageState extends ConsumerState<SecuritySettingsPage>{bool pin=false,biometric=false;
-@override void initState(){super.initState();_load();}
-Future<void> _load()async{final security=ref.read(securityProvider);final hasPin=await security.hasPin();final bio=(await ref.read(repositoryProvider).getSetting('biometric_enabled')??'0')=='1';if(mounted)setState((){pin=hasPin;biometric=bio;});}
-Future<void> _pin()async{final result=await showDialog<bool>(context:context,builder:(_)=>_PinDialog(change:pin));if(result==true){await _load();if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('تم حفظ رمز PIN ✓')));}}
-Future<void> _bio(bool value)async{if(!pin){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('أضف PIN أولاً')));return;}if(value){final security=ref.read(securityProvider);if(!await security.isAvailable()){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('المصادقة الحيوية غير متاحة على هذا الجهاز')));return;}if(!await security.biometric(biometricOnly:true)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('لم يتم التحقق من البصمة')));return;}}setState(()=>biometric=value);await ref.read(repositoryProvider).setSetting('biometric_enabled',value?'1':'0');}
-@override Widget build(BuildContext context)=>Scaffold(appBar:const AppHeader(title:'خيارات الأمان'),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:Column(children:[ListTile(onTap:_pin,leading:const Icon(Icons.password_outlined),title:Text(pin?'تغيير رمز PIN':'إضافة رمز PIN'),subtitle:Text(pin?'PIN من 6 أرقام مفعل':'حماية التطبيق برمز PIN من 6 أرقام'),trailing:const Icon(Icons.chevron_left)),const Divider(height:1),SwitchListTile(value:biometric,onChanged:_bio,secondary:const Icon(Icons.fingerprint),title:const Text('تفعيل البصمة'),subtitle:const Text('استخدام بصمة الهاتف لفتح التطبيق بعد تفعيل PIN'))])),const SizedBox(height:12),const Card(child:Padding(padding:EdgeInsets.all(16),child:Text('عند تغيير PIN سيطلب التطبيق الرمز الحالي أولًا. بعد خمس محاولات خاطئة أثناء القفل لن يسمح بمحاولات إضافية في جلسة القفل الحالية.')))]));}
+class SecuritySettingsPage extends ConsumerStatefulWidget{
+  const SecuritySettingsPage({super.key});
+  @override ConsumerState<SecuritySettingsPage> createState()=>_SecuritySettingsPageState();
 }
-class _PinDialog extends ConsumerStatefulWidget{final bool change;const _PinDialog({required this.change});@override ConsumerState<_PinDialog> createState()=>_PinDialogState();}
-class _PinDialogState extends ConsumerState<_PinDialog>{late final TextEditingController current,first,confirm;bool saving=false;String error='';
-@override void initState(){super.initState();current=TextEditingController();first=TextEditingController();confirm=TextEditingController();}
-@override void dispose(){current.dispose();first.dispose();confirm.dispose();super.dispose();}
-Future<void> _save()async{if(widget.change&&current.text.length!=6){setState(()=>error='أدخل PIN الحالي المكون من 6 أرقام');return;}if(!RegExp(r'^\d{6}$').hasMatch(first.text)||first.text!=confirm.text){setState(()=>error='أدخل PIN جديدًا من 6 أرقام متطابقة');return;}if(widget.change&&!await ref.read(securityProvider).verifyPin(current.text)){setState(()=>error='رمز PIN الحالي غير صحيح');return;}if(widget.change&&first.text==current.text){setState(()=>error='يجب اختيار PIN مختلف عن الرمز الحالي');return;}setState(()=>saving=true);try{await ref.read(securityProvider).setPin(first.text);await ref.read(repositoryProvider).setSetting('pin_enabled','1');if(mounted)Navigator.of(context).pop(true);}catch(e){if(mounted)setState(()=>error='تعذر حفظ PIN: $e');}finally{if(mounted)setState(()=>saving=false);}}
-@override Widget build(BuildContext context)=>AlertDialog(title:Text(widget.change?'تغيير رمز PIN':'إضافة رمز PIN'),content:Column(mainAxisSize:MainAxisSize.min,children:[if(widget.change)TextField(controller:current,maxLength:6,keyboardType:TextInputType.number,obscureText:true,decoration:InputDecoration(labelText:'PIN الحالي',errorText:error.isEmpty?null:error)),TextField(controller:first,maxLength:6,keyboardType:TextInputType.number,obscureText:true,autofocus:!widget.change,decoration:const InputDecoration(labelText:'PIN الجديد من 6 أرقام')),TextField(controller:confirm,maxLength:6,keyboardType:TextInputType.number,obscureText:true,decoration:const InputDecoration(labelText:'تأكيد PIN'))]),actions:[TextButton(onPressed:saving?null:()=>Navigator.pop(context,false),child:const Text('إلغاء')),FilledButton(onPressed:saving?null:_save,child:Text(saving?'جارٍ الحفظ...':'حفظ'))]);}
+class _SecuritySettingsPageState extends ConsumerState<SecuritySettingsPage>{
+  bool pin=false,biometric=false;
+  @override void initState(){super.initState();_load();}
+  Future<void> _load()async{final s=ref.read(securityProvider);final p=await s.hasPin();final b=(await ref.read(repositoryProvider).getSetting('biometric_enabled')??'0')=='1';if(mounted)setState((){pin=p;biometric=b;});}
+  Future<void> _pin()async{final ok=await showDialog<bool>(context:context,builder:(_)=>const _PinDialog());if(ok==true)await _load();}
+  Future<void> _bio(bool value)async{if(!pin)return;setState(()=>biometric=value);await ref.read(repositoryProvider).setSetting('biometric_enabled',value?'1':'0');}
+  @override Widget build(BuildContext context)=>Scaffold(appBar:const AppHeader(title:'خيارات الأمان'),body:ListView(padding:const EdgeInsets.all(16),children:[
+    Card(child:ListTile(onTap:_pin,leading:const Icon(Icons.password),title:Text(pin?'تغيير رمز PIN':'إضافة رمز PIN'),trailing:const Icon(Icons.chevron_left))),
+    Card(child:SwitchListTile(value:biometric,onChanged:_bio,secondary:const Icon(Icons.fingerprint),title:const Text('تفعيل البصمة'),subtitle:const Text('يتطلب تفعيل PIN أولاً'))),
+  ]));
+}
+class _PinDialog extends ConsumerStatefulWidget{const _PinDialog();@override ConsumerState<_PinDialog> createState()=>_PinDialogState();}
+class _PinDialogState extends ConsumerState<_PinDialog>{
+  final pin=TextEditingController(),confirm=TextEditingController();
+  String error='';
+  @override void dispose(){pin.dispose();confirm.dispose();super.dispose();}
+  Future<void> _save()async{if(!RegExp(r'^\d{6}$').hasMatch(pin.text)||pin.text!=confirm.text){setState(()=>error='أدخل PIN من 6 أرقام متطابقة');return;}await ref.read(securityProvider).setPin(pin.text);if(mounted)Navigator.pop(context,true);}
+  @override Widget build(BuildContext context)=>AlertDialog(title:const Text('إضافة رمز PIN'),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:pin,maxLength:6,obscureText:true,keyboardType:TextInputType.number,decoration:InputDecoration(labelText:'PIN',errorText:error.isEmpty?null:error)),TextField(controller:confirm,maxLength:6,obscureText:true,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'تأكيد PIN'))]),actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('إلغاء')),FilledButton(onPressed:_save,child:const Text('حفظ'))]);
+}
