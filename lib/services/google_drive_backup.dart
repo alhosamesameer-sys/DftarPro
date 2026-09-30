@@ -242,9 +242,19 @@ class BackupCoordinator {
       await notifications.reminder(database, 'اربط حساب Google Drive لتفعيل النسخ الاحتياطي التلقائي.');
       return;
     }
+    final configured = await database.getSetting('backup_time') ?? '02:00';
+    final parts = configured.split(':');
+    if (parts.length != 2) return;
+    final now = DateTime.now();
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return;
     final last = int.tryParse(await database.getSetting('backup_last_success') ?? '0') ?? 0;
-    final due = last <= 0 || DateTime.now().millisecondsSinceEpoch - last >= const Duration(hours: 24).inMilliseconds;
-    if (!forceTime && !due) return;
+    final lastDate = last > 0 ? DateTime.fromMillisecondsSinceEpoch(last) : null;
+    final alreadyToday = lastDate != null && lastDate.year == now.year && lastDate.month == now.month && lastDate.day == now.day;
+    final scheduledReached = now.hour > hour || (now.hour == hour && now.minute >= minute);
+    if (!forceTime && (!scheduledReached || alreadyToday)) return;
+    if (forceTime && alreadyToday) return;
     await _runBackup(notify: true);
   }
 
