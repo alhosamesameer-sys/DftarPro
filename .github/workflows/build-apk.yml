@@ -56,6 +56,7 @@ jobs:
           flutter --version
           java -version
           flutter config --no-analytics
+          echo "Verifying DftarPro native PDF, Word HTML and Google Drive backup integration"
       - name: Pub get
         run: flutter pub get
       - name: Analyze
