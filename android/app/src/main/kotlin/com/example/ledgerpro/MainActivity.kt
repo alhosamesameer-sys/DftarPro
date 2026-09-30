@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import androidx.core.content.FileProvider
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
@@ -43,13 +44,25 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pdfChannel).setMethodCallHandler { call, result ->
-            if (call.method != "createStatementPdf") { result.notImplemented(); return@setMethodCallHandler }
+            if (call.method != "createStatementPdf" && call.method != "openStatementPdf") { result.notImplemented(); return@setMethodCallHandler }
             try {
                 val account = call.argument<Map<String, Any?>>("account") ?: emptyMap()
                 val profile = call.argument<Map<String, Any?>>("profile") ?: emptyMap()
                 val transactions = call.argument<List<Map<String, Any?>>>("transactions") ?: emptyList()
                 val balance = (call.argument<Number>("balance") ?: 0).toDouble()
-                result.success(createStatementPdf(account, profile, transactions, balance))
+                val path = createStatementPdf(account, profile, transactions, balance)
+                if (call.method == "openStatementPdf") {
+                    val file = File(path)
+                    val uri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".fileprovider", file)
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/pdf")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (intent.resolveActivity(packageManager) == null) throw IllegalStateException("لا يوجد تطبيق لفتح ملفات PDF")
+                    startActivity(intent)
+                }
+                result.success(path)
             } catch (e: Exception) {
                 result.error("PDF_ERROR", e.message, null)
             }
