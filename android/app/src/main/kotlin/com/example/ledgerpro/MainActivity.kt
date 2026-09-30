@@ -1,5 +1,8 @@
 package com.example.ledgerpro
 
+import com.example.dftar.BuildConfig
+import com.example.dftar.R
+
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
