@@ -24,6 +24,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
   String category = 'عملية';
   String baseCurrency = 'YER';
   List<String> categories = [];
+  List<CurrencyModel> currencies = [];
   final amount = TextEditingController();
   final rate = TextEditingController(text: '1');
   final note = TextEditingController();
@@ -44,6 +45,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
   Future<void> load() async {
     final r = ref.read(repositoryProvider);
     categories = await r.transactionCategories();
+    currencies = await r.currencies();
     baseCurrency = await r.getSetting('base_currency') ?? 'YER';
     amountWords = (await r.getSetting('amount_words') ?? '0') == '1';
     account = widget.accountId;
@@ -230,22 +232,29 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
     onSelectionChanged: (v) => setState(() => type = v.first),
   );
 
-  Widget _currencyField() => DropdownButtonFormField<String>(
-    initialValue: currency,
-    items: const ['YER', 'SAR', 'USD', 'EUR'].map((x) => DropdownMenuItem(value: x, child: Text(currencyName(x), overflow: TextOverflow.ellipsis))).toList(),
-    onChanged: (v) async {
-      if (v != null) {
-        setState(() {
-          currency = v;
-          rate.text = v == baseCurrency ? '1' : rate.text;
-        });
-        if (v == baseCurrency) return;
-        await _loadExchangeRate(v);
-      }
-    },
-    decoration: const InputDecoration(labelText: 'العملة'),
-  );
-
+  Widget _currencyField() {
+    final codes = currencies.map((x) => x.code).toSet().toList();
+    if (!codes.contains(currency)) codes.insert(0, currency);
+    return DropdownButtonFormField<String>(
+      initialValue: currency,
+      items: codes.map((code) {
+        final found = currencies.where((x) => x.code == code).firstOrNull;
+        final label = found == null ? code : found.name + ' (' + found.code + ')';
+        return DropdownMenuItem(value: code, child: Text(label, overflow: TextOverflow.ellipsis));
+      }).toList(),
+      onChanged: (v) async {
+        if (v != null) {
+          setState(() {
+            currency = v;
+            rate.text = v == baseCurrency ? '1' : rate.text;
+          });
+          if (v == baseCurrency) return;
+          await _loadExchangeRate(v);
+        }
+      },
+      decoration: const InputDecoration(labelText: 'العملة'),
+    );
+  }
   Widget _categoryField() => DropdownButtonFormField<String>(
     initialValue: categories.contains(category) ? category : null,
     items: categories.map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
