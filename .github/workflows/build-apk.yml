@@ -1,0 +1,99 @@
+name: Build Ledger Pro APK
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Xmx2g -XX:MaxMetaspaceSize=768m"
+      JAVA_TOOL_OPTIONS: "-Xmx2g -XX:MaxMetaspaceSize=768m"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.7"
+          channel: stable
+          cache: true
+      - name: Prepare and verify release signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/keystore
+          base64 --decode android/keystore/ledgerpro-release.jks.b64 > android/keystore/ledgerpro-release.jks
+          test -s android/keystore/ledgerpro-release.jks
+          keytool -list -keystore android/keystore/ledgerpro-release.jks -storepass ledgerpro -alias ledgerpro >/dev/null
+          echo "========================================"
+          echo "Android Package Name: com.example.dftar"
+          echo "Release Keystore: android/keystore/ledgerpro-release.jks"
+          echo "Alias name: ledgerpro"
+          echo "Release signing certificate:"
+          keytool -list -v -keystore android/keystore/ledgerpro-release.jks -storepass ledgerpro -alias ledgerpro | grep -E 'Owner:|SHA1:|SHA256:'
+          echo "========================================"
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android/sdk/ndk/* || true
+          sudo rm -rf /usr/local/lib/android/sdk/cmake/* || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/share/boost || true
+          df -h
+      - name: Flutter diagnostics
+        run: |
+          flutter --version
+          java -version
+          flutter config --no-analytics
+      - name: Pub get
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Test
+        run: flutter test
+      - name: Build release APK
+        run: flutter build apk --release --no-pub
+      - name: Verify release APK and signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          test -f "$APK"
+          ls -lh "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$APKSIGNER"
+          echo "========================================"
+          echo "APK package and certificate"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "========================================"
+          echo "Release APK verified and signed successfully."
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dftar-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Write release build summary
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          {
+            echo "## Release APK"
+            echo "- Build succeeded: $APK"
+            echo "- Package: com.example.dftar"
+            ls -lh "$APK"
+          } >> "$GITHUB_STEP_SUMMARY"
