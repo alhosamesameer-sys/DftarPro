@@ -124,7 +124,12 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
   }
 
   Future<void> openStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
-    await buildPdf(account, items, balance, profile: profile).then((_) => _nativePdf.invokeMethod('openStatementPdf', {'account': _accountMap(account), 'profile': profile ?? const <String,String>{}, 'transactions': items.map(_txMap).toList(), 'balance': balance}));
+    await _nativePdf.invokeMethod<String>('openStatementPdf', {
+      'account': _accountMap(account),
+      'profile': profile ?? const <String,String>{},
+      'transactions': items.map(_txMap).toList(),
+      'balance': balance,
+    });
   }
 
   Future<void> printStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
