@@ -4,4 +4,42 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets.dart';
-class AccountDetailPage extends ConsumerWidget{final String id;const AccountDetailPage({super.key,required this.id});@override Widget build(BuildContext context,WidgetRef ref){final a=ref.watch(accountProvider(id));final tx=ref.watch(transactionsProvider(id));final base=ref.watch(baseCurrencyProvider).asData?.value??'YER';return Scaffold(body:SafeArea(child:a.when(loading:()=>const Center(child:CircularProgressIndicator()),error:(e,s)=>Center(child:Text('$e')),data:(account){if(account==null)return const Center(child:Text('الحساب غير موجود'));return ListView(padding:const EdgeInsets.all(16),children:[AppHeader(title:'تفاصيل الحساب'),Center(child:AccountAvatar(name:account.name,radius:40)),Center(child:Text(account.name,style:const TextStyle(fontSize:21,fontWeight:FontWeight.bold))),Text(account.phone,textAlign:TextAlign.center),const SizedBox(height:12),FutureBuilder<Map<String,double>>(future:ref.read(repositoryProvider).accountBaseTotals(id,base),builder:(c,s){final n=s.data?['net']??0;return Card(child:Padding(padding:const EdgeInsets.all(18),child:Text('الرصيد: ${money(n.abs(),base)} ${n>=0?'له':'عليه'}',textAlign:TextAlign.center,style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold))));}),Row(children:[Expanded(child:FilledButton(onPressed:()=>context.push('/add-transaction?account=${Uri.encodeComponent(id)}&type=credit'),child:const Text('له'))),const SizedBox(width:8),Expanded(child:OutlinedButton(onPressed:()=>context.push('/add-transaction?account=${Uri.encodeComponent(id)}&type=debit'),child:const Text('عليه')))]),const SizedBox(height:12),tx.when(loading:()=>const Center(child:CircularProgressIndicator()),error:(e,s)=>Text('$e'),data:(items)=>Column(children:items.map((x)=>Card(child:ListTile(title:Text(x.note.isEmpty?x.category:x.note),subtitle:Text(dateAr(x.date)),trailing:MoneyAmount(value:x.amount,currency:x.currency,positive:x.type=='credit')))).toList()))]);}})));}}
+
+class AccountDetailPage extends ConsumerWidget {
+  final String id;
+  const AccountDetailPage({super.key,required this.id});
+  @override Widget build(BuildContext context,WidgetRef ref){
+    final a=ref.watch(accountProvider(id));
+    final tx=ref.watch(transactionsProvider(id));
+    final base=ref.watch(baseCurrencyProvider).asData?.value??'YER';
+    return Scaffold(body:SafeArea(child:a.when(
+      loading:()=>const Center(child:CircularProgressIndicator()),
+      error:(e,s)=>Center(child:Text(e.toString())),
+      data:(account){
+        if(account==null)return const Center(child:Text('الحساب غير موجود'));
+        return ListView(padding:const EdgeInsets.all(16),children:[
+          AppHeader(title:'تفاصيل الحساب'),
+          Center(child:AccountAvatar(name:account.name,radius:40)),
+          const SizedBox(height:8),
+          Center(child:Text(account.name,style:const TextStyle(fontSize:21,fontWeight:FontWeight.bold))),
+          Center(child:Text(account.phone)),
+          const SizedBox(height:12),
+          FutureBuilder<Map<String,double>>(future:ref.read(repositoryProvider).accountBaseTotals(id,base),builder:(context,s){
+            final n=s.data?['net']??0;
+            return Card(child:Padding(padding:const EdgeInsets.all(18),child:Text('الرصيد: '+money(n.abs(),base)+' '+(n>=0?'له':'عليه'),textAlign:TextAlign.center,style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold))));
+          }),
+          const SizedBox(height:12),
+          Row(children:[
+            Expanded(child:FilledButton(onPressed:()=>context.push('/add-transaction?account='+Uri.encodeComponent(id)+'&type=credit'),child:const Text('له'))),
+            const SizedBox(width:8),
+            Expanded(child:OutlinedButton(onPressed:()=>context.push('/add-transaction?account='+Uri.encodeComponent(id)+'&type=debit'),child:const Text('عليه'))),
+          ]),
+          const SizedBox(height:12),
+          tx.when(loading:()=>const Center(child:CircularProgressIndicator()),error:(e,s)=>Text(e.toString()),data:(items)=>Column(children:[
+            for(final x in items) Card(child:ListTile(title:Text(x.note.isEmpty?x.category:x.note),subtitle:Text(dateAr(x.date)),trailing:MoneyAmount(value:x.amount,currency:x.currency,positive:x.type=='credit')))
+          ])),
+        ]);
+      },
+    )));
+  }
+}
