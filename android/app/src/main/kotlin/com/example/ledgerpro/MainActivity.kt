@@ -4,6 +4,9 @@ import com.example.dftar.BuildConfig
 import com.example.dftar.R
 
 import android.content.Intent
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.RectF
@@ -28,9 +31,30 @@ import java.util.Locale
 class MainActivity : FlutterFragmentActivity() {
     private val whatsappChannel = "dftar/whatsapp"
     private val pdfChannel = "dftar/native_pdf"
+    private val backupAlarmChannel = "dftar/backup_alarm"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, backupAlarmChannel).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "scheduleDailyBackup" -> {
+                        val hour = (call.argument<Int>("hour") ?: 2).coerceIn(0, 23)
+                        val minute = (call.argument<Int>("minute") ?: 0).coerceIn(0, 59)
+                        scheduleDailyBackup(hour, minute)
+                        result.success(true)
+                    }
+                    "cancelDailyBackup" -> {
+                        cancelDailyBackup()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                result.error("BACKUP_ALARM_ERROR", e.message, null)
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, whatsappChannel).setMethodCallHandler { call, result ->
             if (call.method != "openWhatsApp") { result.notImplemented(); return@setMethodCallHandler }
@@ -70,6 +94,39 @@ class MainActivity : FlutterFragmentActivity() {
                 result.error("PDF_ERROR", e.message, null)
             }
         }
+    }
+
+    private fun scheduleDailyBackup(hour: Int, minute: Int) {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, BackupAlarmReceiver::class.java).setAction(BackupAlarmReceiver.ACTION_BACKUP)
+        val pending = PendingIntent.getBroadcast(
+            this, 7107, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val calendar = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        alarmManager.setInexactRepeating(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            AlarmManager.INTERVAL_DAY,
+            pending
+        )
+    }
+
+    private fun cancelDailyBackup() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, BackupAlarmReceiver::class.java).setAction(BackupAlarmReceiver.ACTION_BACKUP)
+        val pending = PendingIntent.getBroadcast(
+            this, 7107, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pending)
+        pending.cancel()
     }
 
     private fun money(value: Double): String = String.format(Locale.US, "%.2f", value)
