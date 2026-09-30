@@ -1,0 +1,24 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/app_database.dart';
+import '../data/repositories.dart';
+import '../domain/models.dart';
+import '../services/services.dart';
+import '../services/statement_export_service.dart';
+import '../services/google_drive_backup.dart';
+
+final databaseProvider=Provider<AppDatabase>((ref)=>AppDatabase());
+final repositoryProvider=Provider<LedgerRepository>((ref)=>LedgerRepository(ref.read(databaseProvider)));
+final backupProvider=Provider<BackupService>((ref)=>BackupService(ref.read(databaseProvider)));
+final backupCoordinatorProvider=Provider<BackupCoordinator>((ref){final coordinator=BackupCoordinator(ref.read(databaseProvider));ref.onDispose(coordinator.dispose);return coordinator;});
+final pdfProvider=Provider<StatementExportService>((ref)=>StatementExportService());
+final securityProvider=Provider<SecurityService>((ref)=>SecurityService());
+final themeModeProvider=StateProvider<ThemeMode>((ref)=>ThemeMode.light);
+final currenciesProvider=FutureProvider<List<CurrencyModel>>((ref)=>ref.watch(repositoryProvider).currencies());
+final accountsProvider=FutureProvider.family<List<Account>,String>((ref,query)=>ref.watch(repositoryProvider).accounts(query:query));
+final accountsByTypeProvider=FutureProvider.family<List<Account>,String>((ref,type)=>ref.watch(repositoryProvider).accounts(type:type));
+final accountProvider=FutureProvider.family<Account?,String>((ref,id)=>ref.watch(repositoryProvider).account(id));
+final transactionsProvider=FutureProvider.family<List<TransactionItem>,String?>((ref,accountId)=>ref.watch(repositoryProvider).transactions(accountId:accountId));
+final baseCurrencyProvider=FutureProvider<String>((ref)async=>await ref.watch(repositoryProvider).getSetting('base_currency')??'YER');
+final dashboardProvider=FutureProvider<Map<String,double>>((ref)async{final base=await ref.watch(baseCurrencyProvider.future);return ref.watch(repositoryProvider).dashboardTotals(base);});
+final userProfileProvider=FutureProvider<Map<String,String>>((ref)=>ref.watch(repositoryProvider).userProfile());
