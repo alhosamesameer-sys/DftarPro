@@ -41,6 +41,8 @@ jobs:
           fi
           test -s "$HOME/.android/debug.keystore"
           echo "CI signing is using the generated Android debug keystore; no private project keystore is stored in GitHub."
+          echo "SHA-1 fingerprint for Google OAuth / Drive API:"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -i "SHA1:"
       - name: Free runner disk space
         run: |
           sudo rm -rf /usr/local/lib/android/sdk/ndk/* || true
