@@ -1,0 +1,15 @@
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.idea/
+.vscode/
+*.iml
+*.log
+.env
+.env.*
+android/.gradle/
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
