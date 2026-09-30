@@ -136,6 +136,16 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
             TextField(controller: rate, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'سعر الصرف إلى ' + currencyName(baseCurrency), suffixIcon: loadingRate ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))) : null)),
             const SizedBox(height: 5),
             Text('القيمة بالعملة الأساسية = المبلغ × سعر الصرف', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 4),
+            Builder(builder: (context) {
+              final amountValue = double.tryParse(amount.text.replaceAll(',', '')) ?? 0;
+              final rateValue = double.tryParse(rate.text.replaceAll(',', '')) ?? 0;
+              final converted = amountValue * rateValue;
+              return Text(
+                'ما يعادل: ' + converted.toStringAsFixed(2) + ' ' + baseCurrency,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              );
+            }),
           ],
           const SizedBox(height: 12),
           _categoryField(),
