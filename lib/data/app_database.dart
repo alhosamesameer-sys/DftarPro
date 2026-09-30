@@ -52,18 +52,87 @@ class AppDatabase {
     if(id==null){values['id']=key;values['created_at']=now;values['archived']=0;await d.insert('accounts',values);}else await d.update('accounts',values,where:'id=?',whereArgs:[id]);return key;
   }
   Future<List<TransactionItem>> transactions({String? accountId,String query='',int limit=200,int offset=0,DateTime? from,DateTime? to})async{
-    final d=await db;final rows=await d.query('transactions',where:accountId==null?'deleted=0':'account_id=? AND deleted=0',whereArgs:accountId==null?null:[accountId],orderBy:'date DESC',limit:limit,offset:offset);return rows.map(TransactionItem.fromMap).toList();
+    final d=await db;
+    final where=<String>['deleted=0'];
+    final args=<Object?>[];
+    if(accountId!=null){where.add('account_id=?');args.add(accountId);}
+    if(query.trim().isNotEmpty){where.add('(note LIKE ? OR category LIKE ?)');final q='%${query.trim()}%';args.addAll([q,q]);}
+    if(from!=null){where.add('date>=?');args.add(DateTime(from!.year,from!.month,from!.day).millisecondsSinceEpoch);}
+    if(to!=null){where.add('date<?');args.add(DateTime(to!.year,to!.month,to!.day+1).millisecondsSinceEpoch);}
+    final rows=await d.query('transactions',where:where.join(' AND '),whereArgs:args,orderBy:'date DESC',limit:limit,offset:offset);
+    return rows.map(TransactionItem.fromMap).toList();
   }
   Future<Map<String,double>> accountTotals(String id,String currency)async{
-    final d=await db;final rows=await d.rawQuery('SELECT type,SUM(amount) total FROM transactions WHERE account_id=? AND currency=? AND deleted=0 GROUP BY type',[id,currency]);double credit=0,debit=0;for(final r in rows){final n=(r['total'] as num?)?.toDouble()??0;if(r['type']=='credit')credit=n;if(r['type']=='debit')debit=n;}return {'credit':credit,'debit':debit,'net':credit-debit};
+    final d=await db;
+    final rows=await d.rawQuery('SELECT type,SUM(amount) total FROM transactions WHERE account_id=? AND currency=? AND deleted=0 GROUP BY type',[id,currency]);
+    double credit=0,debit=0;
+    for(final r in rows){final n=(r['total'] as num?)?.toDouble()??0;if(r['type']=='credit')credit=n;if(r['type']=='debit')debit=n;}
+    return {'credit':credit,'debit':debit,'net':credit-debit};
   }
-  Future<Map<String,double>> accountBaseTotals(String id,String currency)=>accountTotals(id,currency);
+  Future<Map<String,double>> accountBaseTotals(String id,String currency)async{
+    final d=await db;
+    final rows=await d.rawQuery('SELECT type,SUM(base_amount) total FROM transactions WHERE account_id=? AND base_currency=? AND deleted=0 GROUP BY type',[id,currency]);
+    double credit=0,debit=0;
+    for(final r in rows){final n=(r['total'] as num?)?.toDouble()??0;if(r['type']=='credit')credit=n;if(r['type']=='debit')debit=n;}
+    return {'credit':credit,'debit':debit,'net':credit-debit};
+  }
   Future<double> balanceFor(String id,String currency)async=>(await accountTotals(id,currency))['net']??0;
   Future<Map<String,double>> dashboardTotals(String currency)async{final d=await db;final rows=await d.rawQuery('SELECT type,SUM(base_amount) total FROM transactions WHERE base_currency=? AND deleted=0 GROUP BY type',[currency]);final out=<String,double>{'credit':0,'debit':0};for(final r in rows)out[r['type'] as String]=(r['total'] as num?)?.toDouble()??0;return out;}
-  Future<String> saveTransaction({required String accountId,required String type,required double amount,required String currency,double rate=1,required String category,DateTime? date,String note='',String? parentId})async{final d=await db;final id=_uuid.v4();final now=DateTime.now().millisecondsSinceEpoch;await d.insert('transactions',{'id':id,'account_id':accountId,'type':type,'amount':amount,'currency':currency,'base_amount':amount*rate,'base_currency':await getSetting('base_currency')??'YER','exchange_rate':rate,'category':category,'date':(date??DateTime.now()).millisecondsSinceEpoch,'created_at':now,'updated_at':now,'note':note,'status':'accepted','source':'local','parent_id':parentId,'deleted':0});return id;}
+  Future<String> saveTransaction({required String accountId,required String type,required double amount,required String currency,double rate=1,required String category,DateTime? date,String note='',String? parentId})async{
+    final d=await db;
+    final id=_uuid.v4();
+    final now=DateTime.now().millisecondsSinceEpoch;
+    final base=await getSetting('base_currency')??'YER';
+    var effectiveRate=rate;
+    if(currency!=base && (effectiveRate<=0 || effectiveRate==1)){
+      effectiveRate=await _rateBetween(currency,base) ?? (throw StateError('لا يوجد سعر صرف محفوظ لـ $currency → $base'));
+    }
+    if(currency==base)effectiveRate=1;
+    await d.insert('transactions',{'id':id,'account_id':accountId,'type':type,'amount':amount,'currency':currency,'base_amount':amount*effectiveRate,'base_currency':base,'exchange_rate':effectiveRate,'category':category,'date':(date??DateTime.now()).millisecondsSinceEpoch,'created_at':now,'updated_at':now,'note':note,'status':'accepted','source':'local','parent_id':parentId,'deleted':0});
+    return id;
+  }
   Future<void> addAttachment(String transactionId,String path,String name,String mime,int size)async{final d=await db;await d.insert('attachments',{'id':_uuid.v4(),'transaction_id':transactionId,'path':path,'name':name,'mime':mime,'size':size,'created_at':DateTime.now().millisecondsSinceEpoch});}
   Future<List<CurrencyModel>> currencies()async{final d=await db;return(await d.query('currencies',orderBy:'is_base DESC,code')).map(CurrencyModel.fromMap).toList();}
-  Future<void> setBaseCurrency(String code)async{final d=await db;await d.update('currencies',{'is_base':0});await d.update('currencies',{'is_base':1},where:'code=?',whereArgs:[code]);await setSetting('base_currency',code);}
+  Future<void> setBaseCurrency(String code)async{
+    final d=await db;
+    final target=code.toUpperCase();
+    final exists=await d.query('currencies',where:'code=?',whereArgs:[target],limit:1);
+    if(exists.isEmpty)throw StateError('العملة غير موجودة: $target');
+    final oldBase=await getSetting('base_currency')??'YER';
+    if(oldBase==target)return;
+    final rows=await d.query('transactions',where:'deleted=0');
+    final converted=<String,double>{};
+    for(final row in rows){
+      final id=row['id'] as String;
+      final source=(row['currency'] as String?)??oldBase;
+      final amount=(row['amount'] as num?)?.toDouble()??0;
+      final rate=source==target?1:(await _rateBetween(source,target));
+      if(rate==null)throw StateError('لا يوجد سعر صرف لتحويل $source إلى $target');
+      converted[id]=amount*rate;
+    }
+    await d.transaction((txn)async{
+      await txn.update('currencies',{'is_base':0});
+      await txn.update('currencies',{'is_base':1},where:'code=?',whereArgs:[target]);
+      for(final row in rows){
+        final id=row['id'] as String;
+        final source=(row['currency'] as String?)??oldBase;
+        final amount=(row['amount'] as num?)?.toDouble()??0;
+        final baseAmount=converted[id]??amount;
+        final rate=amount==0?1:baseAmount/amount;
+        await txn.update('transactions',{'base_amount':baseAmount,'base_currency':target,'exchange_rate':rate,'updated_at':DateTime.now().millisecondsSinceEpoch},where:'id=?',whereArgs:[id]);
+      }
+      await txn.insert('settings',{'key':'base_currency','value':target},conflictAlgorithm:ConflictAlgorithm.replace);
+    });
+  }
+
+  Future<double?> _rateBetween(String from,String to)async{
+    if(from==to)return 1;
+    final direct=await latestRate(from,to);
+    if(direct!=null&&direct>0)return direct;
+    final reverse=await latestRate(to,from);
+    if(reverse!=null&&reverse>0)return 1/reverse;
+    return null;
+  }
   Future<void> addCurrency(String code,String name,String symbol,int decimals)async{final d=await db;await d.insert('currencies',{'code':code.toUpperCase(),'name':name,'symbol':symbol,'decimals':decimals,'is_base':0});}
   Future<void> saveRate(String from,String to,double rate)async{final d=await db;await d.insert('exchange_rates',{'id':_uuid.v4(),'from_code':from,'to_code':to,'rate':rate,'effective_at':DateTime.now().millisecondsSinceEpoch});}
   Future<double?> latestRate(String from,String to)async{final d=await db;final r=await d.query('exchange_rates',where:'from_code=? AND to_code=?',whereArgs:[from,to],orderBy:'effective_at DESC',limit:1);return r.isEmpty?null:(r.first['rate'] as num).toDouble();}
