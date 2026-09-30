@@ -148,7 +148,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     if(time==null)return;
     final value='${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
     await ref.read(repositoryProvider).setSetting('backup_time',value);
-    if(mounted)setState(()=>backupTime=value);
+    if(mounted)setState(()=>backupTime=value); await ref.read(backupCoordinatorProvider).scheduleAutoBackup();
   }
 
   @override Widget build(BuildContext context) {
@@ -177,7 +177,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           const Divider(height:1),
           ListTile(onTap:busy?null:_restoreDrive,leading:const Icon(Icons.cloud_download_outlined),title:const Text('استعادة من Google Drive'),subtitle:const Text('استعادة آخر نسخة مرتبطة بهذا الحساب'),trailing:const Icon(Icons.chevron_left)),
           const Divider(height:1),
-          SwitchListTile(value:auto,onChanged:account.isEmpty?null:(v)async{await ref.read(repositoryProvider).setSetting('backup_auto',v?'1':'0');if(mounted)setState(()=>auto=v);if(v)await ref.read(backupCoordinatorProvider).checkAndBackup();},title:const Text('النسخ الاحتياطي التلقائي'),subtitle:Text('يعمل يوميًا في الوقت المحدد: $backupTime'),secondary:const Icon(Icons.autorenew)),
+          SwitchListTile(value:auto,onChanged:account.isEmpty?null:(v)async{await ref.read(repositoryProvider).setSetting('backup_auto',v?'1':'0');if(mounted)setState(()=>auto=v);await ref.read(backupCoordinatorProvider).scheduleAutoBackup(); if(v)await ref.read(backupCoordinatorProvider).checkAndBackup();},title:const Text('النسخ الاحتياطي التلقائي'),subtitle:Text('يعمل يوميًا في الوقت المحدد: $backupTime'),secondary:const Icon(Icons.autorenew)),
           const Divider(height:1),
           ListTile(onTap:account.isEmpty?null:_chooseTime,leading:const Icon(Icons.schedule),title:const Text('وقت النسخ الاحتياطي'),subtitle:Text(backupTime),trailing:const Icon(Icons.chevron_left)),
           const Divider(height:1),
