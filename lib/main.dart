@@ -62,5 +62,5 @@ class AppShell extends ConsumerWidget{
  NavigationDestination(icon:Icon(Icons.people_outline),selectedIcon:Icon(Icons.people),label:'الحسابات'),
  NavigationDestination(icon:Icon(Icons.swap_horiz_rounded),selectedIcon:Icon(Icons.swap_horiz),label:'العمليات'),
  NavigationDestination(icon:Icon(Icons.bar_chart_outlined),selectedIcon:Icon(Icons.bar_chart),label:'التقارير'),
- NavigationDestination(icon:Icon(Icons.grid_view_rounded),selectedIcon:Icon(Icons.grid_view),label:'المزيد')]));
+ NavigationDestination(icon:Icon(Icons.grid_view_rounded),selectedIcon:Icon(Icons.grid_view),label:'المزيد')]),floatingActionButton:index==0?FloatingActionButton.extended(onPressed:()=>showChooseAccountAndRecord(c,ref),icon:const Icon(Icons.add_rounded),label:const Text('إضافة')):index==2?FloatingActionButton(onPressed:()=>c.push('/add-transaction'),child:const Icon(Icons.add_rounded)):null,floatingActionButtonLocation:FloatingActionButtonLocation.centerDocked);
 }
