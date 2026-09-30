@@ -1,0 +1,3 @@
+class LocalDataSource {
+  const LocalDataSource();
+}
