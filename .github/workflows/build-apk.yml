@@ -134,8 +134,7 @@ jobs:
             keytool -list -v \
               -keystore "$HOME/.android/dftarpro-release.jks" \
               -storepass "${{ secrets.DFTARPRO_KEYSTORE_PASSWORD }}" \
-              -alias "${{ secrets.DFTARPRO_KEY_ALIAS }}" |
-              grep -E "Alias name:|SHA1:|SHA256:"
+              -alias "${{ secrets.DFTARPRO_KEY_ALIAS }}" > /tmp/dftarpro-cert.txt\n            grep -E "Alias name:|SHA1:|SHA256:" /tmp/dftarpro-cert.txt\n            rm -f /tmp/dftarpro-cert.txt
             echo ""
             ls -lh "$APK"
           } >> "$GITHUB_STEP_SUMMARY"
