@@ -40,18 +40,41 @@ class _LedgerAppState extends ConsumerState<LedgerApp> with WidgetsBindingObserv
   @override void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); _prepare(); }
   @override void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
   Future<void> _prepare() async {
-    final db = ref.read(databaseProvider);
-    final mode = await db.getSetting('theme_mode') ?? 'light';
-    ref.read(themeModeProvider.notifier).state = mode == 'dark' ? ThemeMode.dark : ThemeMode.light;
-    await ref.read(backupCoordinatorProvider).start();
-    final hasPin = await ref.read(securityProvider).hasPin();
-    final biometricEnabled = (await db.getSetting('biometric_enabled')) == '1' && hasPin;
-    _useBiometric = biometricEnabled;
-    if (hasPin) {
-      final ok = biometricEnabled ? await ref.read(securityProvider).biometric() : false;
-      _locked = !ok;
+    try {
+      final db = ref.read(databaseProvider);
+      final mode = await db.getSetting('theme_mode') ?? 'light';
+      if (mounted) {
+        ref.read(themeModeProvider.notifier).state =
+            mode == 'dark' ? ThemeMode.dark : ThemeMode.light;
+      }
+
+      final hasPin = await ref.read(securityProvider).hasPin();
+      final biometricEnabled =
+          (await db.getSetting('biometric_enabled')) == '1' && hasPin;
+      _useBiometric = biometricEnabled;
+
+      if (hasPin && biometricEnabled) {
+        final ok = await ref.read(securityProvider).biometric();
+        _locked = !ok;
+      }
+    } catch (e, st) {
+      debugPrint('DftarPro startup initialization failed: $e');
+      debugPrintStack(stackTrace: st);
+    } finally {
+      if (mounted) {
+        setState(() => _ready = true);
+        unawaited(_startBackupCoordinator());
+      }
     }
-    if (mounted) setState(() => _ready = true);
+  }
+
+  Future<void> _startBackupCoordinator() async {
+    try {
+      await ref.read(backupCoordinatorProvider).start();
+    } catch (e, st) {
+      debugPrint('Backup coordinator startup failed: $e');
+      debugPrintStack(stackTrace: st);
+    }
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) { _backgroundedAt = DateTime.now(); return; }
