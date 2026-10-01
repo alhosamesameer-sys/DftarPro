@@ -157,15 +157,17 @@ class MainActivity : FlutterFragmentActivity() {
         canvas.restore()
     }
 
+
     private fun createStatementPdf(account: Map<String, Any?>, profile: Map<String, Any?>, transactions: List<Map<String, Any?>>, balance: Double): String {
         val document = PdfDocument()
         val width = 595
         val height = 842
         val margin = 34f
-        val green = Color.rgb(8, 127, 91)
-        val dark = Color.rgb(25, 40, 36)
-        val light = Color.rgb(244, 248, 246)
-        val border = Color.rgb(205, 216, 211)
+        val contentWidth = width - (margin * 2)
+        val dark = Color.rgb(25, 25, 25)
+        val border = Color.rgb(55, 55, 55)
+        val light = Color.rgb(247, 247, 247)
+        val headerGray = Color.rgb(235, 235, 235)
         val white = Color.WHITE
 
         var pageNumber = 0
@@ -173,107 +175,206 @@ class MainActivity : FlutterFragmentActivity() {
         var canvas: Canvas? = null
         var y = 0f
 
+        fun strokeRect(left: Float, top: Float, right: Float, bottom: Float, color: Int = border, stroke: Float = 1f) {
+            canvas!!.drawRect(left, top, right, bottom, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.STROKE
+                strokeWidth = stroke
+            })
+        }
+
+        fun fillRect(left: Float, top: Float, right: Float, bottom: Float, color: Int) {
+            canvas!!.drawRect(left, top, right, bottom, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.FILL
+            })
+        }
+
+        fun cellRtl(text: String, left: Float, top: Float, right: Float, heightCell: Float, size: Float = 9f, bold: Boolean = false, color: Int = dark) {
+            drawRtl(canvas!!, text, right - 5f, top + 5f, (right - left - 10f).toInt().coerceAtLeast(1), size, color, bold)
+        }
+
         fun startPage() {
             pageNumber += 1
             page = document.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
             canvas = page!!.canvas
             canvas!!.drawColor(white)
-            val owner = profile["user_name"]?.toString().orEmpty().ifBlank { "سمير الحسامي" }
-            val address = profile["address_ar"]?.toString().orEmpty()
-            drawText(canvas!!, owner, width - margin, margin + 20, 13f, dark, true, Paint.Align.RIGHT)
-            drawText(canvas!!, address, width - margin, margin + 39, 9f, dark, false, Paint.Align.RIGHT)
+
+            val ownerAr = profile["user_name"]?.toString().orEmpty().ifBlank { "سمير الحسامي" }
+            val ownerEn = profile["user_name_en"]?.toString().orEmpty().ifBlank { "Sameer Alhosami" }
+            val addressAr = profile["address_ar"]?.toString().orEmpty()
+            val addressEn = profile["address_en"]?.toString().orEmpty()
+            val phone = profile["phone"]?.toString().orEmpty()
+
+            // Word-style header: English left, logo centered, Arabic right.
+            drawText(canvas!!, ownerEn, margin + 4f, margin + 17f, 12f, dark, true, Paint.Align.LEFT)
+            if (addressEn.isNotBlank()) drawText(canvas!!, addressEn, margin + 4f, margin + 34f, 8f, dark, false, Paint.Align.LEFT)
+
             val logoPath = profile["logo_path"]?.toString().orEmpty()
-            val logo = if (logoPath.isNotBlank()) BitmapFactory.decodeFile(logoPath) else BitmapFactory.decodeResource(resources, R.drawable.app_icon)
+            val logo = if (logoPath.isNotBlank()) BitmapFactory.decodeFile(logoPath)
+            else BitmapFactory.decodeResource(resources, R.drawable.app_icon)
             if (logo != null && logo.width > 0 && logo.height > 0) {
-                val max = 86f
-                val scale = minOf(max / logo.width.toFloat(), max / logo.height.toFloat())
+                val maxW = 58f
+                val maxH = 58f
+                val scale = minOf(maxW / logo.width.toFloat(), maxH / logo.height.toFloat())
                 val lw = logo.width * scale
                 val lh = logo.height * scale
-                canvas!!.drawBitmap(logo, null, RectF(width / 2f - lw / 2f, margin + 1f, width / 2f + lw / 2f, margin + 1f + lh), Paint(Paint.ANTI_ALIAS_FLAG))
+                canvas!!.drawBitmap(logo, null, RectF(width / 2f - lw / 2f, margin - 1f, width / 2f + lw / 2f, margin - 1f + lh), Paint(Paint.ANTI_ALIAS_FLAG))
             }
-            drawText(canvas!!, "كشف حساب", width / 2f, margin + 104, 20f, dark, true, Paint.Align.CENTER)
-            canvas!!.drawLine(margin, margin + 78, width - margin, margin + 78, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = dark; strokeWidth = 1.5f })
-            y = margin + 98
+
+            drawText(canvas!!, ownerAr, width - margin - 4f, margin + 17f, 12f, dark, true, Paint.Align.RIGHT)
+            val arSecond = if (phone.isBlank()) addressAr else if (addressAr.isBlank()) phone else "$addressAr • $phone"
+            if (arSecond.isNotBlank()) drawText(canvas!!, arSecond, width - margin - 4f, margin + 34f, 8f, dark, false, Paint.Align.RIGHT)
+
+            canvas!!.drawLine(margin, margin + 68f, width - margin, margin + 68f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = dark
+                strokeWidth = 1.4f
+            })
+            drawText(canvas!!, "كشف حساب", width / 2f, margin + 94f, 19f, dark, true, Paint.Align.CENTER)
+            y = margin + 108f
         }
 
-        fun finishPage() { page?.let { document.finishPage(it) }; page = null; canvas = null }
-        fun ensure(space: Float) { if (y + space > height - 42) { finishPage(); startPage() } }
+        fun finishPage() {
+            page?.let { document.finishPage(it) }
+            page = null
+            canvas = null
+        }
+
+        fun ensure(space: Float) {
+            if (y + space > height - 38f) {
+                finishPage()
+                startPage()
+            }
+        }
+
+        fun drawCustomerTable() {
+            val row1 = 25f
+            val row2 = 27f
+            val row3 = 27f
+            fillRect(margin, y, width - margin, y + row1, headerGray)
+            strokeRect(margin, y, width - margin, y + row1, border, 1.2f)
+            cellRtl("بيانات العميل", margin, y, width - margin, row1, 10f, true)
+            y += row1
+
+            val mid = margin + contentWidth / 2f
+            strokeRect(margin, y, width - margin, y + row2, border)
+            canvas!!.drawLine(mid, y, mid, y + row2, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            cellRtl("اسم العميل: " + account["name"].toString(), mid, y, width - margin, row2, 8.5f)
+            cellRtl("العنوان: " + (account["address"]?.toString().orEmpty().ifBlank { "—" }), margin, y, mid, row2, 8.5f)
+            y += row2
+
+            strokeRect(margin, y, width - margin, y + row3, border)
+            canvas!!.drawLine(mid, y, mid, y + row3, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            cellRtl("رقم الهاتف: " + (account["phone"]?.toString().orEmpty().ifBlank { "—" }), mid, y, width - margin, row3, 8.5f)
+            cellRtl("رقم الحساب: " + (account["id"]?.toString().orEmpty().takeLast(12)), margin, y, mid, row3, 8.5f)
+            y += row3 + 10f
+        }
+
+        fun drawBalanceTables(base: String, credit: Double, debit: Double, netLabel: String) {
+            val currentH = 58f
+            fillRect(margin, y, width - margin, y + currentH, white)
+            strokeRect(margin, y, width - margin, y + currentH, border, 1.2f)
+            drawText(canvas!!, "إجمالي الرصيد الحالي", width / 2f, y + 19f, 10.5f, dark, true, Paint.Align.CENTER)
+            drawText(canvas!!, money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, width / 2f, y + 43f, 16f, dark, true, Paint.Align.CENTER)
+            y += currentH + 8f
+
+            val h = 42f
+            val c1 = margin
+            val c2 = margin + contentWidth / 3f
+            val c3 = margin + contentWidth * 2f / 3f
+            val c4 = width - margin
+            fillRect(c1, y, c4, y + h, light)
+            strokeRect(c1, y, c4, y + h, border)
+            canvas!!.drawLine(c2, y, c2, y + h, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            canvas!!.drawLine(c3, y, c3, y + h, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            cellRtl("إجمالي له\n" + money(credit) + " " + base, c3, y, c4, h, 8.5f, true)
+            cellRtl("إجمالي عليه\n" + money(debit) + " " + base, c2, y, c3, h, 8.5f, true)
+            cellRtl("الصافي\n" + money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, c1, y, c2, h, 8.5f, true)
+            y += h + 12f
+        }
+
+        fun drawTransactionHeader() {
+            val h = 28f
+            fillRect(margin, y, width - margin, y + h, headerGray)
+            strokeRect(margin, y, width - margin, y + h, border)
+            val x2 = margin + contentWidth * 0.23f
+            val x3 = margin + contentWidth * 0.48f
+            val x4 = margin + contentWidth * 0.68f
+            val x5 = width - margin
+            canvas!!.drawLine(x2, y, x2, y + h, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            canvas!!.drawLine(x3, y, x3, y + h, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            canvas!!.drawLine(x4, y, x4, y + h, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+            cellRtl("التاريخ", x4, y, x5, h, 8f, true)
+            cellRtl("التفاصيل", x3, y, x4, h, 8f, true)
+            cellRtl("النوع", x2, y, x3, h, 8f, true)
+            cellRtl("المبلغ / ما يعادله", margin, y, x2, h, 7.5f, true)
+            y += h
+        }
 
         startPage()
 
-        val accountName = account["name"]?.toString().orEmpty()
-        val accountPhone = account["phone"]?.toString().orEmpty()
-        val accountAddress = account["address"]?.toString().orEmpty()
         val base = profile["base_currency"]?.toString().orEmpty().ifBlank {
             transactions.firstOrNull()?.get("baseCurrency")?.toString() ?: "YER"
         }
-
-        drawRtl(canvas!!, "العميل: " + accountName, width - margin, y, width - (margin * 2).toInt(), 11f, dark, true)
-        y += 25
-        drawRtl(canvas!!, "الهاتف: " + if (accountPhone.isBlank()) "—" else accountPhone, width - margin, y, width - (margin * 2).toInt(), 10f, dark, false)
-        y += 23
-        drawRtl(canvas!!, "العنوان: " + if (accountAddress.isBlank()) "—" else accountAddress, width - margin, y, width - (margin * 2).toInt(), 10f, dark, false)
-        y += 35
-
-        val credit = transactions.filter { it["type"]?.toString() == "credit" }.sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
-        val debit = transactions.filter { it["type"]?.toString() == "debit" }.sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
+        val credit = transactions.filter { it["type"]?.toString() == "credit" }
+            .sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
+        val debit = transactions.filter { it["type"]?.toString() == "debit" }
+            .sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
         val netLabel = if (balance >= 0) "له" else "عليه"
 
-        canvas!!.drawRect(margin, y, width - margin, y + 62, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
-        canvas!!.drawRect(margin, y, width - margin, y + 62, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
-        drawText(canvas!!, "إجمالي الرصيد الحالي", width / 2f, y + 21, 11f, dark, true, Paint.Align.CENTER)
-        drawText(canvas!!, money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, width / 2f, y + 48, 17f, green, true, Paint.Align.CENTER)
-        y += 76
+        ensure(105f)
+        drawCustomerTable()
+        ensure(120f)
+        drawBalanceTables(base, credit, debit, netLabel)
 
-        drawText(canvas!!, "إجمالي له: " + money(credit) + " " + base, width - margin, y + 18, 9f, dark, true, Paint.Align.RIGHT)
-        drawText(canvas!!, "إجمالي عليه: " + money(debit) + " " + base, width - margin, y + 38, 9f, dark, true, Paint.Align.RIGHT)
-        y += 58
+        drawText(canvas!!, "تفاصيل العمليات", width - margin, y, 12f, dark, true, Paint.Align.RIGHT)
+        y += 8f
+        drawTransactionHeader()
 
-        drawText(canvas!!, "سجل العمليات", width - margin, y, 14f, green, true, Paint.Align.RIGHT)
-        y += 10
-
-        val rowHeight = 46f
-        canvas!!.drawRect(margin, y, width - margin, y + 28, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = green })
-        drawText(canvas!!, "التاريخ", 86f, y + 19, 8f, white, true, Paint.Align.CENTER)
-        drawText(canvas!!, "العملية", 205f, y + 19, 8f, white, true, Paint.Align.CENTER)
-        drawText(canvas!!, "المبلغ / المعادل", 380f, y + 19, 8f, white, true, Paint.Align.CENTER)
-        drawText(canvas!!, "الرصيد", 515f, y + 19, 8f, white, true, Paint.Align.CENTER)
-        y += 28
-
-        var running = 0.0
-        transactions.forEachIndexed { index, item ->
-            ensure(rowHeight)
-            if (index % 2 == 0) canvas!!.drawRect(margin, y, width - margin, y + rowHeight, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
-            canvas!!.drawRect(margin, y, width - margin, y + rowHeight, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
-
-            val amount = (item["amount"] as? Number)?.toDouble() ?: 0.0
-            val baseAmount = (item["baseAmount"] as? Number)?.toDouble() ?: 0.0
-            val type = item["type"]?.toString() ?: "credit"
-            running += if (type == "credit") baseAmount else -baseAmount
-            val date = item["date"]?.toString()?.take(10)?.replace("-", "/") ?: ""
-            val note = item["note"]?.toString().orEmpty().ifBlank { item["category"]?.toString() ?: "عملية" }
-            val currency = item["currency"]?.toString() ?: base
-
-            drawText(canvas!!, date, 86f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
-            drawText(canvas!!, note.take(20), 205f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
-            drawText(canvas!!, money(amount) + " " + currency, 380f, y + 19, 7.5f, dark, false, Paint.Align.CENTER)
-            drawText(canvas!!, money(baseAmount) + " " + base, 380f, y + 34, 6.5f, dark, false, Paint.Align.CENTER)
-            drawText(canvas!!, money(running) + " " + base, 515f, y + 27, 7.5f, dark, false, Paint.Align.CENTER)
-            y += rowHeight
-        }
-
+        val rowHeight = 44f
         if (transactions.isEmpty()) {
-            drawText(canvas!!, "لا توجد عمليات مسجلة", width / 2f, y + 25, 10f, dark, false, Paint.Align.CENTER)
-            y += 45
+            strokeRect(margin, y, width - margin, y + rowHeight, border)
+            drawText(canvas!!, "لا توجد عمليات مسجلة في هذا الحساب.", width / 2f, y + 27f, 9f, dark, false, Paint.Align.CENTER)
+            y += rowHeight
+        } else {
+            transactions.forEachIndexed { index, item ->
+                ensure(rowHeight)
+                val rowTop = y
+                val rowBottom = y + rowHeight
+                if (index % 2 == 0) fillRect(margin, rowTop, width - margin, rowBottom, light)
+                strokeRect(margin, rowTop, width - margin, rowBottom, border)
+
+                val x2 = margin + contentWidth * 0.23f
+                val x3 = margin + contentWidth * 0.48f
+                val x4 = margin + contentWidth * 0.68f
+                val x5 = width - margin
+                canvas!!.drawLine(x2, rowTop, x2, rowBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+                canvas!!.drawLine(x3, rowTop, x3, rowBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+                canvas!!.drawLine(x4, rowTop, x4, rowBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border })
+
+                val date = item["date"]?.toString()?.take(10)?.replace("-", "/") ?: ""
+                val note = item["note"]?.toString().orEmpty().ifBlank { item["category"]?.toString() ?: "عملية" }
+                val type = if (item["type"]?.toString() == "credit") "له" else "عليه"
+                val amount = (item["amount"] as? Number)?.toDouble() ?: 0.0
+                val baseAmount = (item["baseAmount"] as? Number)?.toDouble() ?: 0.0
+                val currency = item["currency"]?.toString() ?: base
+
+                cellRtl(date, x4, rowTop, x5, rowHeight, 7.2f)
+                cellRtl(note.take(28), x3, rowTop, x4, rowHeight, 7.2f)
+                cellRtl(type, x2, rowTop, x3, rowHeight, 7.5f, true)
+                cellRtl(money(amount) + " " + currency + "\n" + money(baseAmount) + " " + base, margin, rowTop, x2, rowHeight, 7.1f)
+                y = rowBottom
+            }
         }
 
-        ensure(70f)
-        y += 10
-        canvas!!.drawRect(margin, y, width - margin, y + 58, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = light })
-        canvas!!.drawRect(margin, y, width - margin, y + 58, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border; style = Paint.Style.STROKE })
-        drawText(canvas!!, "إجمالي له: " + money(credit) + " " + base, width - margin - 8, y + 19, 9f, dark, true, Paint.Align.RIGHT)
-        drawText(canvas!!, "إجمالي عليه: " + money(debit) + " " + base, width - margin - 8, y + 38, 9f, dark, true, Paint.Align.RIGHT)
-        drawText(canvas!!, "الصافي: " + money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, margin + 8, y + 31, 9f, green, true, Paint.Align.LEFT)
+        ensure(82f)
+        y += 8f
+        val totalH = 62f
+        fillRect(margin, y, width - margin, y + totalH, light)
+        strokeRect(margin, y, width - margin, y + totalH, border)
+        drawRtl(canvas!!, "إجمالي له: " + money(credit) + " " + base, width - margin - 8f, y + 7f, (contentWidth * 0.42f).toInt(), 8.5f, dark, true)
+        drawRtl(canvas!!, "إجمالي عليه: " + money(debit) + " " + base, width - margin - 8f, y + 28f, (contentWidth * 0.42f).toInt(), 8.5f, dark, true)
+        drawRtl(canvas!!, "الصافي: " + money(kotlin.math.abs(balance)) + " " + base + " — " + netLabel, margin + contentWidth * 0.58f, y + 18f, (contentWidth * 0.38f).toInt(), 9f, dark, true)
 
         finishPage()
         val dir = File(cacheDir, "statements")
@@ -283,4 +384,6 @@ class MainActivity : FlutterFragmentActivity() {
         document.close()
         return file.absolutePath
     }
+
+
 }
