@@ -120,6 +120,9 @@ jobs:
 
       - name: Write release build summary
         shell: bash
+        env:
+          DFTARPRO_KEYSTORE_PASSWORD: ${{ secrets.DFTARPRO_KEYSTORE_PASSWORD }}
+          DFTARPRO_KEY_ALIAS: ${{ secrets.DFTARPRO_KEY_ALIAS }}
         run: |
           set -euo pipefail
           APK=build/app/outputs/flutter-apk/app-release.apk
@@ -133,8 +136,10 @@ jobs:
             echo "### Signing certificate"
             keytool -list -v \
               -keystore "$HOME/.android/dftarpro-release.jks" \
-              -storepass "${{ secrets.DFTARPRO_KEYSTORE_PASSWORD }}" \
-              -alias "${{ secrets.DFTARPRO_KEY_ALIAS }}" > /tmp/dftarpro-cert.txt\n            grep -E "Alias name:|SHA1:|SHA256:" /tmp/dftarpro-cert.txt\n            rm -f /tmp/dftarpro-cert.txt
+              -storepass "$DFTARPRO_KEYSTORE_PASSWORD" \
+              -alias "$DFTARPRO_KEY_ALIAS" > /tmp/dftarpro-cert.txt
+            grep -E "Alias name:|SHA1:|SHA256:" /tmp/dftarpro-cert.txt
+            rm -f /tmp/dftarpro-cert.txt
             echo ""
             ls -lh "$APK"
           } >> "$GITHUB_STEP_SUMMARY"
