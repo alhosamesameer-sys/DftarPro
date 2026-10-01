@@ -128,7 +128,7 @@ jobs:
             echo "- Build succeeded: $APK"
             echo "- Package: com.example.dftar"
             echo "- Signing: permanent DftarPro release keystore"
-            echo "- Version: 1.0.2 (versionCode 3)"
+            echo "- Version: 1.0.3 (versionCode 4)"
             echo ""
             echo "### Signing certificate"
             keytool -list -v \
