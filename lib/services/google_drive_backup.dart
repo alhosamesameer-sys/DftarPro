@@ -148,7 +148,7 @@ class BackupNotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
-    const settings = InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher'));
+    const settings = InitializationSettings(android: AndroidInitializationSettings('@drawable/app_icon'));
     await _notifications.initialize(settings);
     final android = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
