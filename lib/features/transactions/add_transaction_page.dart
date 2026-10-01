@@ -21,7 +21,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
   String? account;
   String type = 'credit';
   String currency = 'YER';
-  String category = 'عملية';
+  String category = 'دفعة';
   String baseCurrency = 'YER';
   List<String> categories = [];
   List<CurrencyModel> currencies = [];
@@ -73,7 +73,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
       }
     }
     if (!categories.contains(category)) {
-      category = categories.contains('عملية') ? 'عملية' : (categories.isNotEmpty ? categories.first : 'عملية');
+      category = categories.contains('دفعة') ? 'دفعة' : (categories.isNotEmpty ? categories.first : 'دفعة');
     }
     if (foreignCurrency) await _loadExchangeRate(currency, silent: true);
     if (mounted) setState(() => loading = false);
@@ -249,7 +249,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
       initialValue: currency,
       items: codes.map((code) {
         final found = currencies.where((x) => x.code == code).firstOrNull;
-        final label = found == null ? code : found.name + ' (' + found.code + ')';
+        final label = code == 'YER' ? 'يمني' : code == 'SAR' ? 'سعودي' : code == 'USD' ? 'دولار' : (found == null ? code : found.name);
         return DropdownMenuItem(value: code, child: Text(label, overflow: TextOverflow.ellipsis));
       }).toList(),
       onChanged: (v) async {
