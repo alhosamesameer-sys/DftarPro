@@ -4,6 +4,10 @@ import com.example.dftar.BuildConfig
 import com.example.dftar.R
 
 import android.content.Intent
+import android.app.Activity
+import android.provider.DocumentsContract
+import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
@@ -32,9 +36,69 @@ class MainActivity : FlutterFragmentActivity() {
     private val whatsappChannel = "dftar/whatsapp"
     private val pdfChannel = "dftar/native_pdf"
     private val backupAlarmChannel = "dftar/backup_alarm"
+    private val backupStorageChannel = "dftar/backup_storage"
+    private val chooseBackupRequest = 7201
+    private val chooseRestoreRequest = 7202
+    private var pendingBackupResult: MethodChannel.Result? = null
+    private var pendingRestoreResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, backupStorageChannel).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "chooseBackupDestination" -> {
+                        if (pendingBackupResult != null) {
+                            result.error("BUSY", "يوجد اختيار ملف جارٍ بالفعل", null)
+                            return@setMethodCallHandler
+                        }
+                        pendingBackupResult = result
+                        val fileName = call.argument<String>("fileName") ?: "دفتربرو_نسخة_احتياطية.json"
+                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_TITLE, fileName)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        }
+                        startActivityForResult(intent, chooseBackupRequest)
+                    }
+                    "chooseRestoreFile" -> {
+                        if (pendingRestoreResult != null) {
+                            result.error("BUSY", "يوجد اختيار ملف جارٍ بالفعل", null)
+                            return@setMethodCallHandler
+                        }
+                        pendingRestoreResult = result
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/json"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        }
+                        startActivityForResult(intent, chooseRestoreRequest)
+                    }
+                    "writeBackup" -> {
+                        val uriString = call.argument<String>("uri") ?: throw IllegalArgumentException("URI مفقود")
+                        val bytes = call.argument<ByteArray>("bytes") ?: throw IllegalArgumentException("بيانات النسخة مفقودة")
+                        val uri = Uri.parse(uriString)
+                        contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                            ?: throw IllegalStateException("تعذر فتح ملف النسخة للكتابة")
+                        result.success(true)
+                    }
+                    "readBackup" -> {
+                        val uriString = call.argument<String>("uri") ?: throw IllegalArgumentException("URI مفقود")
+                        val uri = Uri.parse(uriString)
+                        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw IllegalStateException("تعذر فتح ملف النسخة للقراءة")
+                        result.success(bytes)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                if (call.method == "chooseBackupDestination") pendingBackupResult = null
+                if (call.method == "chooseRestoreFile") pendingRestoreResult = null
+                result.error("BACKUP_STORAGE_ERROR", e.message, null)
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, backupAlarmChannel).setMethodCallHandler { call, result ->
             try {
@@ -94,6 +158,48 @@ class MainActivity : FlutterFragmentActivity() {
                 result.error("PDF_ERROR", e.message, null)
             }
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != chooseBackupRequest && requestCode != chooseRestoreRequest) return
+
+        val pending = if (requestCode == chooseBackupRequest) pendingBackupResult else pendingRestoreResult
+        if (requestCode == chooseBackupRequest) pendingBackupResult = null else pendingRestoreResult = null
+        if (pending == null) return
+
+        if (resultCode != Activity.RESULT_OK || data?.data == null) {
+            pending.success(null)
+            return
+        }
+
+        val uri = data.data!!
+        try {
+            val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            if (flags != 0) {
+                try { contentResolver.takePersistableUriPermission(uri, flags) } catch (_: SecurityException) {}
+            }
+            val name = queryDisplayName(uri) ?: "دفتربرو_نسخة_احتياطية.json"
+            val provider = if (uri.authority == "com.google.android.apps.docs.storage") "Google Drive" else "ملفات الجهاز"
+            pending.success(mapOf(
+                "uri" to uri.toString(),
+                "name" to name,
+                "provider" to provider,
+                "accountLabel" to if (provider == "Google Drive") "Google Drive — الحساب الذي اخترته" else provider
+            ))
+        } catch (e: Exception) {
+            pending.error("BACKUP_STORAGE_ERROR", e.message, null)
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) return cursor.getString(index)
+            }
+        }
+        return null
     }
 
     private fun scheduleDailyBackup(hour: Int, minute: Int) {
