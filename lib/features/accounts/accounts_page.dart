@@ -45,9 +45,20 @@ Future<String?> showAddAccountSheet(BuildContext context, WidgetRef ref, {String
       builder: (_) => _AddAccountSheet(initialType: initialType),
     );
 
+Future<bool?> showEditAccountSheet(BuildContext context, WidgetRef ref, String accountId) async {
+  final account = await ref.read(repositoryProvider).account(accountId);
+  if (account == null || !context.mounted) return false;
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _AddAccountSheet(initialType: account.type, account: account),
+  );
+}
+
 class _AddAccountSheet extends ConsumerStatefulWidget {
   final String initialType;
-  const _AddAccountSheet({required this.initialType});
+  final dynamic account;
+  const _AddAccountSheet({required this.initialType, this.account});
   @override ConsumerState<_AddAccountSheet> createState() => _AddAccountSheetState();
 }
 
@@ -61,7 +72,17 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
   String countryCode = '+967';
   bool saving = false;
 
-  @override void initState() { super.initState(); type = widget.initialType; }
+  @override void initState() {
+    super.initState();
+    type = widget.account?.type ?? widget.initialType;
+    if (widget.account != null) {
+      name.text = widget.account.name;
+      phone.text = widget.account.phone;
+      company.text = widget.account.company;
+      address.text = widget.account.address;
+      notes.text = widget.account.notes;
+    }
+  }
   @override void dispose() { name.dispose(); phone.dispose(); company.dispose(); address.dispose(); notes.dispose(); super.dispose(); }
 
   Future<void> save() async {
@@ -74,8 +95,9 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
     setState(() => saving = true);
     try {
       final id = await ref.read(repositoryProvider).saveAccount(
+        id: widget.account?.id,
         name: name.text.trim(), phone: normalizedPhone, company: company.text.trim(),
-        address: address.text.trim(), notes: notes.text.trim(), type: type, currency: 'YER',
+        address: address.text.trim(), notes: notes.text.trim(), type: type, currency: widget.account?.currency ?? 'YER',
       );
       ref.invalidate(accountsProvider(''));
       ref.invalidate(accountsByTypeProvider('customer'));
@@ -92,7 +114,7 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16, top: 16),
     child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Text('إضافة عميل', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+      Text(widget.account == null ? 'إضافة عميل' : 'تعديل الحساب', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
       const SizedBox(height: 12),
       TextField(controller: name, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'اسم العميل *')),
       const SizedBox(height: 8),
@@ -119,7 +141,7 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
         decoration: const InputDecoration(labelText: 'نوع الحساب'),
       ),
       const SizedBox(height: 12),
-      PrimaryButton(label: saving ? 'جارٍ الحفظ...' : 'حفظ العميل', icon: Icons.save, onPressed: saving ? null : save),
+      PrimaryButton(label: saving ? 'جارٍ الحفظ...' : widget.account == null ? 'حفظ العميل' : 'حفظ التعديل', icon: Icons.save, onPressed: saving ? null : save),
     ])),
   );
 }
@@ -148,6 +170,64 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
       Expanded(child: selected.when(loading: () => const Center(child: CircularProgressIndicator()), error: (e, s) => Center(child: Text('$e')), data: (items) => ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) => _tile(context, items[index])))),
     ]);
   }
-  Widget _tile(BuildContext context, dynamic a) => Card(child: ListTile(leading: AccountAvatar(name: a.name), title: Text(a.name), subtitle: Text(a.phone.isEmpty ? (a.type == 'supplier' ? 'مورد' : 'عميل') : a.phone), onTap: () => context.push('/accounts/${a.id}'), trailing: FutureBuilder<double>(future: ref.read(repositoryProvider).accountBaseTotals(a.id, ref.read(baseCurrencyProvider).valueOrNull ?? 'YER').then((x) => x['net'] ?? 0), builder: (context, snapshot) { final v = snapshot.data ?? 0; final base = ref.read(baseCurrencyProvider).valueOrNull ?? 'YER'; return Text('${money(v.abs(), base)}\n${v >= 0 ? 'له' : 'عليه'}'); })));
+  Widget _tile(BuildContext context, dynamic a) => Card(
+    child: ListTile(
+      leading: AccountAvatar(name: a.name),
+      title: Text(a.name),
+      subtitle: Text(a.phone.isEmpty ? (a.type == 'supplier' ? 'مورد' : 'عميل') : a.phone),
+      onTap: () => context.push('/accounts/${a.id}'),
+      onLongPress: () => _accountActions(context, a),
+      trailing: FutureBuilder<double>(
+        future: ref.read(repositoryProvider).accountBaseTotals(a.id, ref.read(baseCurrencyProvider).valueOrNull ?? 'YER').then((x) => x['net'] ?? 0),
+        builder: (context, snapshot) {
+          final v = snapshot.data ?? 0;
+          final base = ref.read(baseCurrencyProvider).valueOrNull ?? 'YER';
+          return Text('${money(v.abs(), base)}\n${v >= 0 ? 'له' : 'عليه'}');
+        },
+      ),
+    ),
+  );
+
+  Future<void> _accountActions(BuildContext context, dynamic a) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('تعديل'), onTap: () => Navigator.pop(sheetContext, 'edit')),
+          ListTile(leading: const Icon(Icons.delete_outline), title: const Text('حذف'), onTap: () => Navigator.pop(sheetContext, 'delete')),
+        ]),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'edit') {
+      await showEditAccountSheet(context, ref, a.id);
+      ref.invalidate(accountsProvider(''));
+      ref.invalidate(accountsByTypeProvider('customer'));
+      ref.invalidate(accountsByTypeProvider('supplier'));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف الحساب؟'),
+        content: Text('سيتم حذف حساب «${a.name}» وجميع عملياته. هل تريد المتابعة؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(repositoryProvider).deleteAccount(a.id);
+      ref.invalidate(accountsProvider(''));
+      ref.invalidate(accountsByTypeProvider('customer'));
+      ref.invalidate(accountsByTypeProvider('supplier'));
+      ref.invalidate(dashboardProvider);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الحساب')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر حذف الحساب: $e')));
+    }
+  }
   Widget chip(String text, bool selected, VoidCallback tap) => Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: ChoiceChip(label: Text(text), selected: selected, onSelected: (_) => tap()));
 }
