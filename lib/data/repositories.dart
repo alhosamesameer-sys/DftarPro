@@ -15,6 +15,7 @@ class LedgerRepository {
   }
   Future<Account?> account(String id)=>db.account(id);
   Future<String> saveAccount({String? id,required String name,String phone='',String company='',String address='',String notes='',required String type,required String currency})=>db.saveAccount(id:id,name:name,phone:phone,company:company,address:address,notes:notes,type:type,currency:currency);
+  Future<void> deleteAccount(String id)=>db.deleteAccount(id);
   Future<List<TransactionItem>> transactions({String? accountId,String query='',int limit=200,int offset=0,DateTime? from,DateTime? to})=>db.transactions(accountId:accountId,query:query,limit:limit,offset:offset,from:from,to:to);
   Future<double> balanceFor(String id,String currency)=>db.balanceFor(id,currency);
   Future<Map<String,double>> accountTotals(String id,String currency)=>db.accountTotals(id,currency);
