@@ -51,6 +51,17 @@ class AppDatabase {
     final d=await db;final now=DateTime.now().millisecondsSinceEpoch;final key=id??_uuid.v4();final values=<String,Object?>{'name':name,'phone':phone,'company_name':company,'address':address,'notes':notes,'account_type':type,'currency':currency,'image':image??'','updated_at':now};
     if(id==null){values['id']=key;values['created_at']=now;values['archived']=0;await d.insert('accounts',values);}else await d.update('accounts',values,where:'id=?',whereArgs:[id]);return key;
   }
+  Future<void> deleteAccount(String id) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete('attachments', where: 'transaction_id IN (SELECT id FROM transactions WHERE account_id=?)', whereArgs: [id]);
+      await txn.delete('invoice_items', where: 'invoice_id IN (SELECT id FROM invoices WHERE account_id=?)', whereArgs: [id]);
+      await txn.delete('invoices', where: 'account_id=?', whereArgs: [id]);
+      await txn.delete('transactions', where: 'account_id=?', whereArgs: [id]);
+      await txn.delete('accounts', where: 'id=?', whereArgs: [id]);
+    });
+  }
+
   Future<List<TransactionItem>> transactions({String? accountId,String query='',int limit=200,int offset=0,DateTime? from,DateTime? to})async{
     final d=await db;
     final where=<String>['deleted=0'];
