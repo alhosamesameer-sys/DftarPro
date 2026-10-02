@@ -78,7 +78,7 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
     if (widget.account != null) {
       name.text = widget.account.name;
       phone.text = widget.account.phone;
-      company.text = widget.account.company;
+      company.text = widget.account.companyName;
       address.text = widget.account.address;
       notes.text = widget.account.notes;
     }
