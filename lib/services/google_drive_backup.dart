@@ -1,130 +1,102 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../data/app_database.dart';
 
-class _GoogleAuthClient extends http.BaseClient {
-  final Map<String, String> _headers;
-  final http.Client _inner = http.Client();
-  _GoogleAuthClient(this._headers);
-  @override Future<http.StreamedResponse> send(http.BaseRequest request) { request.headers.addAll(_headers); return _inner.send(request); }
-  @override void close() => _inner.close();
-}
-
+/// Google Drive backup through Android's Storage Access Framework (SAF).
+/// The user chooses the Drive account/file in the Android picker. DftarPro
+/// stores the returned content URI and can update the same document later.
 class GoogleDriveBackupService {
-  static const _scope = drive.DriveApi.driveFileScope;
-  static const _fileName = 'دفتر_Pro_نسخة_احتياطية.json';
+  static const _channel = MethodChannel('dftar/backup_storage');
+  static const _fileName = 'دفتربرو_نسخة_احتياطية.json';
   final AppDatabase database;
-  final GoogleSignIn _google = GoogleSignIn(scopes: [_scope]);
   GoogleDriveBackupService(this.database);
 
-  Future<GoogleSignInAccount?> _account({bool silent = false}) async {
-    try {
-      return silent ? await _google.signInSilently() : await _google.signIn();
-    } on PlatformException catch (e) {
-      if (e.code == 'sign_in_failed' || e.message?.contains('ApiException: 10') == true) {
-        throw StateError('تعذر تسجيل الدخول إلى Google. إعدادات OAuth الخاصة بنسخة Android (اسم الحزمة وبصمة SHA-1/SHA-256) لا تطابق نسخة دفتر Pro الموقعة.');
-      }
-      rethrow;
-    }
+  Future<Map<String, dynamic>?> chooseBackupDestination() async {
+    final result = await _channel.invokeMethod<dynamic>('chooseBackupDestination', {'fileName': _fileName});
+    if (result == null) return null;
+    return Map<String, dynamic>.from(result as Map);
   }
 
-  Future<drive.DriveApi> _api(GoogleSignInAccount account) async {
-    final headers = await account.authHeaders;
-    return drive.DriveApi(_GoogleAuthClient(headers));
+  Future<Map<String, dynamic>?> chooseRestoreFile() async {
+    final result = await _channel.invokeMethod<dynamic>('chooseRestoreFile');
+    if (result == null) return null;
+    return Map<String, dynamic>.from(result as Map);
   }
 
-  Future<GoogleSignInAccount?> connect() => _account();
-
-  Future<void> disconnect() async {
-    try { await _google.signOut(); } catch (_) {}
-    await database.setSetting('backup_account', '');
-    await database.setSetting('backup_drive_file_id', '');
+  Future<void> _writeUri(String uri, List<int> bytes) async {
+    await _channel.invokeMethod('writeBackup', {'uri': uri, 'bytes': Uint8List.fromList(bytes)});
   }
 
-  Future<drive.File?> _findBackup(drive.DriveApi api) async {
-    final result = await api.files.list(
-      q: "name = '$_fileName' and trashed = false",
-      spaces: 'drive',
-      orderBy: 'modifiedTime desc',
-      pageSize: 10,
-      $fields: 'files(id,name,modifiedTime)',
-    );
-    final files = result.files ?? const <drive.File>[];
-    return files.isEmpty ? null : files.first;
+  Future<List<int>> _readUri(String uri) async {
+    final result = await _channel.invokeMethod<dynamic>('readBackup', {'uri': uri});
+    if (result is Uint8List) return result;
+    if (result is List) return result.cast<int>();
+    throw StateError('تعذر قراءة ملف النسخة الاحتياطية');
+  }
+
+  Future<String> connect() async {
+    final selected = await chooseBackupDestination();
+    if (selected == null) throw StateError('لم يتم اختيار مكان لحفظ النسخة الاحتياطية');
+    final uri = selected['uri']?.toString() ?? '';
+    if (uri.isEmpty) throw StateError('تعذر الحصول على مرجع ملف Google Drive');
+    await database.setSetting('backup_drive_uri', uri);
+    await database.setSetting('backup_drive_name', selected['name']?.toString() ?? _fileName);
+    await database.setSetting('backup_drive_provider', selected['provider']?.toString() ?? 'Google Drive');
+    await database.setSetting('backup_account', selected['accountLabel']?.toString() ?? 'Google Drive — الحساب الذي اخترته');
+    return await upload();
   }
 
   Future<String> upload() async {
-    var account = await _account(silent: true);
-    account ??= await _account();
-    if (account == null) throw StateError('لم يتم اختيار حساب Google');
-    final api = await _api(account);
+    final uri = await database.getSetting('backup_drive_uri') ?? '';
+    if (uri.isEmpty) throw StateError('لم يتم ربط ملف Google Drive بعد');
     final bytes = utf8.encode(jsonEncode(await database.exportData()));
-    final storedId = await database.getSetting('backup_drive_file_id');
-    final existing = storedId?.isNotEmpty == true ? drive.File(id: storedId) : await _findBackup(api);
-    drive.File result;
-    final media = drive.Media(Stream<List<int>>.value(bytes), bytes.length, contentType: 'application/json');
-    if (existing?.id != null && existing!.id!.isNotEmpty) {
-      try {
-        result = await api.files.update(drive.File(name: _fileName, mimeType: 'application/json'), existing.id!, uploadMedia: media, $fields: 'id,name,modifiedTime');
-      } catch (_) {
-        result = await _create(api, bytes);
-      }
-    } else {
-      result = await _create(api, bytes);
+    try {
+      await _writeUri(uri, bytes);
+    } catch (_) {
+      throw StateError('تعذر تحديث ملف Google Drive المرتبط. أعد اختيار ملف النسخة من Drive.');
     }
-    final id = result.id;
-    if (id == null || id.isEmpty) throw StateError('تعذر الحصول على معرف ملف النسخة الاحتياطية');
-    await database.setSetting('backup_drive_file_id', id);
-    await database.setSetting('backup_account', account.email);
-    return account.email;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.setSetting('backup_drive_last_success', '$now');
+    return await database.getSetting('backup_account') ?? 'Google Drive — الحساب الذي اخترته';
   }
-
-  Future<drive.File> _create(drive.DriveApi api, List<int> bytes) => api.files.create(
-    drive.File(name: _fileName, mimeType: 'application/json'),
-    uploadMedia: drive.Media(Stream<List<int>>.value(bytes), bytes.length, contentType: 'application/json'),
-    $fields: 'id,name,modifiedTime',
-  );
 
   Future<Map<String, dynamic>> downloadBackup() async {
     if (!await _online()) throw StateError('لا يوجد اتصال بالإنترنت');
-    var account = await _account(silent: true);
-    account ??= await _account();
-    if (account == null) throw StateError('لم يتم اختيار حساب Google');
-    final api = await _api(account);
-    var id = await database.getSetting('backup_drive_file_id') ?? '';
-    if (id.isEmpty) {
-      final found = await _findBackup(api);
-      id = found?.id ?? '';
-      if (id.isNotEmpty) await database.setSetting('backup_drive_file_id', id);
+    final uri = await database.getSetting('backup_drive_uri') ?? '';
+    List<int> bytes;
+    if (uri.isNotEmpty) {
+      try {
+        bytes = await _readUri(uri);
+      } catch (_) {
+        final selected = await chooseRestoreFile();
+        if (selected == null) throw StateError('لم يتم اختيار نسخة احتياطية من Google Drive');
+        bytes = await _readUri(selected['uri'].toString());
+        await _saveSelected(selected);
+      }
+    } else {
+      final selected = await chooseRestoreFile();
+      if (selected == null) throw StateError('لم يتم اختيار نسخة احتياطية من Google Drive');
+      final selectedUri = selected['uri']?.toString() ?? '';
+      if (selectedUri.isEmpty) throw StateError('ملف النسخة الاحتياطية غير صالح');
+      bytes = await _readUri(selectedUri);
+      await _saveSelected(selected);
     }
-    if (id.isEmpty) throw StateError('لم يتم العثور على نسخة دفتر Pro في حساب Google هذا');
-    drive.Media response;
-    try {
-      final result = await api.files.get(id, downloadOptions: drive.DownloadOptions.fullMedia);
-      if (result is! drive.Media) throw StateError('تعذر تنزيل النسخة من Google Drive');
-      response = result;
-    } catch (_) {
-      final found = await _findBackup(api);
-      if (found?.id == null) throw StateError('لم يتم العثور على نسخة دفتر Pro في حساب Google هذا');
-      final result = await api.files.get(found!.id!, downloadOptions: drive.DownloadOptions.fullMedia);
-      if (result is! drive.Media) throw StateError('تعذر تنزيل النسخة من Google Drive');
-      response = result;
-      await database.setSetting('backup_drive_file_id', found.id!);
-    }
-    final chunks = <List<int>>[];
-    await for (final chunk in response.stream) { chunks.add(chunk); }
-    final bytes = chunks.expand((x) => x).toList();
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map<String, dynamic>) throw const FormatException('النسخة الموجودة على Google Drive غير صالحة');
     return decoded;
+  }
+
+  Future<void> _saveSelected(Map<String, dynamic> selected) async {
+    await database.setSetting('backup_drive_uri', selected['uri']?.toString() ?? '');
+    await database.setSetting('backup_drive_name', selected['name']?.toString() ?? _fileName);
+    await database.setSetting('backup_drive_provider', selected['provider']?.toString() ?? 'Google Drive');
+    await database.setSetting('backup_account', selected['accountLabel']?.toString() ?? 'Google Drive — الحساب الذي اخترته');
   }
 
   Future<bool> _online() async {
@@ -136,7 +108,7 @@ class GoogleDriveBackupService {
     final configured = await database.getSetting('backup_local_path') ?? '';
     final dir = Directory(configured.isEmpty ? (await getApplicationDocumentsDirectory()).path : configured);
     if (!await dir.exists()) await dir.create(recursive: true);
-    final file = File('${dir.path}/$_fileName');
+    final file = File(dir.path + '/' + _fileName);
     await file.writeAsString(jsonEncode(await database.exportData()), flush: true);
     return file;
   }
@@ -160,7 +132,7 @@ class BackupNotificationService {
   Future<void> success(AppDatabase db) async {
     if (!await _enabled('backup_notify_success', db)) return;
     await initialize();
-    await _notifications.show(2001, 'النسخ الاحتياطي', 'تم تحديث النسخة الاحتياطية بنجاح.', const NotificationDetails(
+    await _notifications.show(2001, 'النسخ الاحتياطي', 'تم تحديث النسختين المحلية وGoogle Drive بنجاح.', const NotificationDetails(
       android: AndroidNotificationDetails('backup_status','النسخ الاحتياطي',channelDescription:'نتائج النسخ الاحتياطي',importance:Importance.defaultImportance,priority:Priority.defaultPriority),
     ));
   }
@@ -228,9 +200,7 @@ class BackupCoordinator {
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
     if (hour == null || minute == null) return;
-    try {
-      await _alarmChannel.invokeMethod('scheduleDailyBackup', {'hour': hour, 'minute': minute});
-    } catch (_) {}
+    try { await _alarmChannel.invokeMethod('scheduleDailyBackup', {'hour': hour, 'minute': minute}); } catch (_) {}
   }
 
   Future<bool> _online() async {
@@ -247,19 +217,14 @@ class BackupCoordinator {
     final now = DateTime.now();
     if (now.hour != int.tryParse(parts[0]) || now.minute != int.tryParse(parts[1])) return;
     _minuteBusy = true;
-    try {
-      await checkAndBackup(forceTime: true);
-    } finally {
-      _minuteBusy = false;
-    }
+    try { await checkAndBackup(forceTime: true); } finally { _minuteBusy = false; }
   }
 
   Future<void> checkAndBackup({bool forceTime = false}) async {
     if (!await _online()) return;
     if ((await database.getSetting('backup_auto') ?? '0') != '1') return;
-    final account = await database.getSetting('backup_account') ?? '';
-    if (account.isEmpty) {
-      await notifications.reminder(database, 'اربط حساب Google Drive لتفعيل النسخ الاحتياطي التلقائي.');
+    if ((await database.getSetting('backup_drive_uri') ?? '').isEmpty) {
+      await notifications.reminder(database, 'اختر ملف Google Drive لربط النسخة الاحتياطية التلقائية.');
       return;
     }
     final configured = await database.getSetting('backup_time') ?? '02:00';
@@ -281,18 +246,18 @@ class BackupCoordinator {
   Future<bool> _runBackup({bool notify = true}) async {
     try {
       await drive.createLocalCopy();
-      final email = await drive.upload();
+      final account = await drive.upload();
       final now = DateTime.now().millisecondsSinceEpoch;
       await database.setSetting('backup_last_success', '$now');
       await database.setSetting('backup_last_status', 'success');
       await database.setSetting('backup_last_error', '');
-      await database.setSetting('backup_account', email);
+      await database.setSetting('backup_account', account);
       if (notify) await notifications.success(database);
       return true;
     } catch (e) {
       await database.setSetting('backup_last_status', 'failure');
       await database.setSetting('backup_last_error', e.toString());
-      if (notify) await notifications.failure(database, 'تعذر تحديث النسخة الاحتياطية. سيتم إعادة المحاولة عند توفر الاتصال.');
+      if (notify) await notifications.failure(database, 'تعذر تحديث النسخة الاحتياطية. أعد اختيار ملف Drive إذا لزم الأمر.');
       return false;
     }
   }
@@ -300,20 +265,18 @@ class BackupCoordinator {
   Future<String> connectAndBackup() async {
     if (!await _online()) throw StateError('لا يوجد اتصال بالإنترنت');
     final account = await drive.connect();
-    if (account == null) throw StateError('لم يتم اختيار حساب Google');
-    await database.setSetting('backup_account', account.email);
     final ok = await _runBackup(notify: true);
-    if (!ok) throw StateError('تم اختيار حساب Google لكن فشل رفع النسخة الاحتياطية');
-    return account.email;
+    if (!ok) throw StateError('تم اختيار ملف Google Drive لكن فشل تحديث النسخة الاحتياطية');
+    return account;
   }
 
   Future<void> backupNow() async {
     if (!await _online()) throw StateError('لا يوجد اتصال بالإنترنت');
-    final account = await drive.connect();
-    if (account == null) throw StateError('لم يتم اختيار حساب Google');
-    await database.setSetting('backup_account', account.email);
+    if ((await database.getSetting('backup_drive_uri') ?? '').isEmpty) {
+      throw StateError('لم يتم ربط ملف Google Drive بعد');
+    }
     final ok = await _runBackup(notify: true);
-    if (!ok) throw StateError('فشل رفع النسخة الاحتياطية');
+    if (!ok) throw StateError('فشل تحديث النسخة الاحتياطية');
   }
 
   Future<void> restoreFromDrive({bool merge = false}) async {
@@ -324,8 +287,11 @@ class BackupCoordinator {
   }
 
   Future<void> disconnect() async {
-    if (Platform.isAndroid) { try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {} }
-    await drive.disconnect();
+    await database.setSetting('backup_drive_uri', '');
+    await database.setSetting('backup_drive_name', '');
+    await database.setSetting('backup_drive_provider', '');
+    await database.setSetting('backup_account', '');
     await database.setSetting('backup_last_status', '');
+    if (Platform.isAndroid) { try { await _alarmChannel.invokeMethod('cancelDailyBackup'); } catch (_) {} }
   }
 }
