@@ -3,6 +3,7 @@ package com.example.ledgerpro
 import com.example.dftar.BuildConfig
 import com.example.dftar.R
 
+import android.app.Activity
 import android.content.Intent
 import android.provider.ContactsContract
 import android.app.AlarmManager
