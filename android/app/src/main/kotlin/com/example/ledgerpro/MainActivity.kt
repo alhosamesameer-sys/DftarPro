@@ -4,6 +4,7 @@ import com.example.dftar.BuildConfig
 import com.example.dftar.R
 
 import android.content.Intent
+import android.provider.ContactsContract
 import android.app.Activity
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -39,8 +40,10 @@ class MainActivity : FlutterFragmentActivity() {
     private val backupStorageChannel = "dftar/backup_storage"
     private val chooseBackupRequest = 7201
     private val chooseRestoreRequest = 7202
+    private val chooseContactRequest = 7203
     private var pendingBackupResult: MethodChannel.Result? = null
     private var pendingRestoreResult: MethodChannel.Result? = null
+    private var pendingContactResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -97,6 +100,28 @@ class MainActivity : FlutterFragmentActivity() {
                 if (call.method == "chooseBackupDestination") pendingBackupResult = null
                 if (call.method == "chooseRestoreFile") pendingRestoreResult = null
                 result.error("BACKUP_STORAGE_ERROR", e.message, null)
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dftar/contacts").setMethodCallHandler { call, result ->
+            if (call.method != "pickContact") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            if (pendingContactResult != null) {
+                result.error("BUSY", "يوجد اختيار جهة اتصال جارٍ بالفعل", null)
+                return@setMethodCallHandler
+            }
+            pendingContactResult = result
+            try {
+                val intent = Intent(Intent.ACTION_PICK).apply {
+                    data = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivityForResult(intent, chooseContactRequest)
+            } catch (e: Exception) {
+                pendingContactResult = null
+                result.error("CONTACT_PICKER_ERROR", "تعذر فتح جهات الاتصال: ${e.message}", null)
             }
         }
 
@@ -162,6 +187,49 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == chooseContactRequest) {
+            val pending = pendingContactResult
+            pendingContactResult = null
+            if (pending == null) return
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                pending.success(null)
+                return
+            }
+            try {
+                val contactUri = data.data!!
+                var displayName: String? = null
+                var phoneNumber: String? = null
+                contentResolver.query(
+                    contactUri,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val phoneIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        if (nameIndex >= 0) displayName = cursor.getString(nameIndex)
+                        if (phoneIndex >= 0) phoneNumber = cursor.getString(phoneIndex)
+                    }
+                }
+                if (displayName.isNullOrBlank() && phoneNumber.isNullOrBlank()) {
+                    pending.error("CONTACT_EMPTY", "لم يتم العثور على اسم أو رقم هاتف", null)
+                } else {
+                    pending.success(mapOf(
+                        "name" to (displayName ?: ""),
+                        "phone" to (phoneNumber ?: "")
+                    ))
+                }
+            } catch (e: Exception) {
+                pending.error("CONTACT_READ_ERROR", "تعذر قراءة جهة الاتصال: ${e.message}", null)
+            }
+            return
+        }
+
         if (requestCode != chooseBackupRequest && requestCode != chooseRestoreRequest) return
 
         val pending = if (requestCode == chooseBackupRequest) pendingBackupResult else pendingRestoreResult
