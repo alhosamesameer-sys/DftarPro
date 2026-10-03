@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
@@ -85,6 +86,31 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
   }
   @override void dispose() { name.dispose(); phone.dispose(); company.dispose(); address.dispose(); notes.dispose(); super.dispose(); }
 
+  static const _contactsChannel = MethodChannel('dftar/contacts');
+
+  Future<void> pickContact() async {
+    if (saving) return;
+    try {
+      final contact = await _contactsChannel.invokeMethod<Map<dynamic, dynamic>>('pickContact');
+      if (contact == null || !mounted) return;
+      final selectedName = (contact['name'] ?? '').toString().trim();
+      final selectedPhone = (contact['phone'] ?? '').toString().trim();
+      if (selectedName.isNotEmpty) name.text = selectedName;
+      if (selectedPhone.isNotEmpty) phone.text = selectedPhone;
+      setState(() {});
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'تعذر فتح جهات الاتصال')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح جهات الاتصال')),
+      );
+    }
+  }
+
   Future<void> save() async {
     if (name.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أدخل اسم العميل أولاً')));
@@ -127,7 +153,20 @@ class _AddAccountSheetState extends ConsumerState<_AddAccountSheet> {
           decoration: const InputDecoration(labelText: 'الدولة'),
         )),
         const SizedBox(width: 8),
-        Expanded(child: TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الهاتف'))),
+        Expanded(
+          child: TextField(
+            controller: phone,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'رقم الهاتف',
+              suffixIcon: IconButton(
+                tooltip: 'اختيار من جهات الاتصال',
+                icon: const Icon(Icons.contacts_outlined, size: 20),
+                onPressed: saving ? null : pickContact,
+              ),
+            ),
+          ),
+        ),
       ]),
       const SizedBox(height: 8),
       TextField(controller: company, decoration: const InputDecoration(labelText: 'الشركة')),
