@@ -1,4 +1,5 @@
 name: Build Ledger Pro APK
+# Build validation: contact picker integration
 
 on:
   push:
