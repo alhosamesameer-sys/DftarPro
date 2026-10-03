@@ -13,7 +13,7 @@ class BackupPage extends ConsumerStatefulWidget {
 
 class _BackupPageState extends ConsumerState<BackupPage> {
   bool auto = false, busy = false;
-  String account = '', driveName = '', driveProvider = '', lastStatus = '', lastError = '', backupTime = '02:00';
+  String account = '', lastStatus = '', lastError = '', backupTime = '02:00';
   int lastSuccess = 0;
 
   @override void initState() { super.initState(); _load(); }
@@ -22,13 +22,11 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     final repo = ref.read(repositoryProvider);
     final a = await repo.getSetting('backup_account') ?? '';
     final enabled = (await repo.getSetting('backup_auto') ?? '0') == '1';
-    final driveFile = await repo.getSetting('backup_drive_name') ?? '';
-    final driveSource = await repo.getSetting('backup_drive_provider') ?? '';
     final status = await repo.getSetting('backup_last_status') ?? '';
     final error = await repo.getSetting('backup_last_error') ?? '';
     final last = int.tryParse(await repo.getSetting('backup_last_success') ?? '0') ?? 0;
     final time = await repo.getSetting('backup_time') ?? '02:00';
-    if (mounted) setState(() { account=a; driveName=driveFile; driveProvider=driveSource; auto=enabled; lastStatus=status; lastError=error; lastSuccess=last; backupTime=time; });
+    if (mounted) setState(() { account=a; auto=enabled; lastStatus=status; lastError=error; lastSuccess=last; backupTime=time; });
   }
 
   void _refreshLedger() {
@@ -163,13 +161,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           const SizedBox(height:10),
           const Text('Google Drive',textAlign:TextAlign.center,style:TextStyle(fontSize:21,fontWeight:FontWeight.w900)),
           const SizedBox(height:6),
-          Text(account.isEmpty?'لم يتم ربط نسخة Google Drive بعد':account,textAlign:TextAlign.center,style:const TextStyle(color:Colors.grey)),
-          if (driveName.isNotEmpty) ...[
-            const SizedBox(height:4),
-            Text('${driveProvider.isEmpty ? 'Google Drive' : driveProvider}: $driveName',textAlign:TextAlign.center,style:const TextStyle(fontSize:12,color:Colors.grey)),
-          ],
+          Text(account.isEmpty?'لم يتم ربط حساب Google بعد':account,textAlign:TextAlign.center,style:const TextStyle(color:Colors.grey)),
           const SizedBox(height:16),
-          FilledButton.icon(onPressed:busy?null:_connect,icon:const Icon(Icons.login),label:Text(account.isEmpty?'ربط Google Drive وتحديث النسخة':'تغيير ملف/حساب Google Drive')),
+          FilledButton.icon(onPressed:busy?null:_connect,icon:const Icon(Icons.login),label:Text(account.isEmpty?'ربط حساب Google ورفع النسخة':'تغيير حساب Google')),
           if(account.isNotEmpty)...[
             const SizedBox(height:8),
             OutlinedButton.icon(onPressed:busy?null:_disconnect,icon:const Icon(Icons.link_off),label:const Text('فصل الحساب'))
@@ -181,13 +175,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           const Divider(height:1),
           ListTile(onTap:busy?null:_restoreLocal,leading:const Icon(Icons.restore),title:const Text('استعادة نسخة احتياطية من الهاتف'),subtitle:const Text('اختر الاستبدال أو الدمج بأمان'),trailing:const Icon(Icons.chevron_left)),
           const Divider(height:1),
-          ListTile(onTap:busy?null:_restoreDrive,leading:const Icon(Icons.cloud_download_outlined),title:const Text('استعادة من Google Drive'),subtitle:const Text('اختر النسخة من Drive ثم استبدال أو دمج البيانات'),trailing:const Icon(Icons.chevron_left)),
+          ListTile(onTap:busy?null:_restoreDrive,leading:const Icon(Icons.cloud_download_outlined),title:const Text('استعادة من Google Drive'),subtitle:const Text('استعادة آخر نسخة مرتبطة بهذا الحساب'),trailing:const Icon(Icons.chevron_left)),
           const Divider(height:1),
           SwitchListTile(value:auto,onChanged:account.isEmpty?null:(v)async{await ref.read(repositoryProvider).setSetting('backup_auto',v?'1':'0');if(mounted)setState(()=>auto=v);await ref.read(backupCoordinatorProvider).scheduleAutoBackup(); if(v)await ref.read(backupCoordinatorProvider).checkAndBackup();},title:const Text('النسخ الاحتياطي التلقائي'),subtitle:Text('يعمل يوميًا في الوقت المحدد: $backupTime'),secondary:const Icon(Icons.autorenew)),
           const Divider(height:1),
           ListTile(onTap:account.isEmpty?null:_chooseTime,leading:const Icon(Icons.schedule),title:const Text('وقت النسخ الاحتياطي'),subtitle:Text(backupTime),trailing:const Icon(Icons.chevron_left)),
           const Divider(height:1),
-          ListTile(onTap:busy?null:_backupNow,leading:const Icon(Icons.backup_outlined),title:const Text('نسخ Google Drive الآن'),subtitle:Text('تحديث النسخة المحلية ونسخة Google Drive المرتبطة\n$_lastText()'),trailing:busy?const SizedBox(width:22,height:22,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.chevron_left)),
+          ListTile(onTap:busy?null:_backupNow,leading:const Icon(Icons.backup_outlined),title:const Text('نسخ Google Drive الآن'),subtitle:Text(_lastText()),trailing:busy?const SizedBox(width:22,height:22,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.chevron_left)),
         ])),
         const SizedBox(height:12),
         Card(child:ListTile(leading:Icon(lastStatus=='failure'?Icons.error_outline:Icons.verified_outlined,color:lastStatus=='failure'?Colors.red:color),title:Text(lastStatus=='failure'?'آخر محاولة فشلت':lastStatus=='success'?'آخر نسخة ناجحة':lastStatus=='restored'?'تمت الاستعادة':'حالة النسخ الاحتياطي'),subtitle:Text(lastStatus=='failure'?(lastError.isEmpty?'ستتم إعادة المحاولة عند توفر الاتصال.':lastError):_lastText()))),
