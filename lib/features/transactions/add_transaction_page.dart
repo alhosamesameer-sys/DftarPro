@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/calculator_engine.dart';
 import '../../domain/models.dart';
 import '../accounts/accounts_page.dart';
 import '../../shared/widgets.dart';
@@ -123,7 +124,14 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
           _typeField(),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'المبلغ'))),
+            Expanded(child: TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(
+              labelText: 'المبلغ',
+              suffixIcon: IconButton(
+                tooltip: 'آلة حاسبة',
+                icon: const Icon(Icons.calculate_outlined),
+                onPressed: saving ? null : _openAmountCalculator,
+              ),
+            ))),
             const SizedBox(width: 8),
             SizedBox(width: 120, child: _currencyField()),
           ]),
@@ -157,6 +165,124 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _openAmountCalculator() async {
+    final controller = TextEditingController(text: amount.text);
+    final result = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) {
+        String expression = controller.text;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.calculate_outlined),
+                SizedBox(width: 8),
+                Text('آلة حاسبة'),
+              ],
+            ),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.right,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'العملية الحسابية',
+                      hintText: 'مثال: 100+50*2',
+                      prefixIcon: Icon(Icons.functions),
+                    ),
+                    onChanged: (value) => expression = value,
+                    onSubmitted: (_) {
+                      final value = CalculatorEngine.evaluate(expression);
+                      if (value != null) Navigator.of(dialogContext).pop(value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'النتيجة: ' + _calculatorResultText(expression),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final key in const ['7','8','9','÷','4','5','6','×','1','2','3','-','0','.','+','⌫'])
+                        SizedBox(
+                          width: 58,
+                          height: 44,
+                          child: OutlinedButton(
+                            onPressed: () {
+                              var value = controller.text;
+                              if (key == '⌫') {
+                                if (value.isNotEmpty) value = value.substring(0, value.length - 1);
+                              } else {
+                                value += key;
+                              }
+                              controller.text = value;
+                              controller.selection = TextSelection.collapsed(offset: value.length);
+                              expression = value;
+                              setDialogState(() {});
+                            },
+                            child: Text(key, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            controller.clear();
+                            expression = '';
+                            setDialogState(() {});
+                          },
+                          icon: const Icon(Icons.clear),
+                          label: const Text('مسح'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            final value = CalculatorEngine.evaluate(expression);
+                            if (value != null) Navigator.of(dialogContext).pop(value);
+                          },
+                          icon: const Icon(Icons.check),
+                          label: const Text('إدخال المبلغ'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    if (result != null && mounted) {
+      amount.text = _trimNumber(result);
+      setState(() {});
+    }
+  }
+
+  String _calculatorResultText(String expression) {
+    final value = CalculatorEngine.evaluate(expression);
+    return value == null ? '—' : _trimNumber(value);
   }
 
   Widget _accountField() {
