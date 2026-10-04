@@ -174,99 +174,118 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
       builder: (dialogContext) {
         String expression = controller.text;
         return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.calculate_outlined),
-                SizedBox(width: 8),
-                Text('آلة حاسبة'),
-              ],
-            ),
-            content: SizedBox(
-              width: 360,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    textDirection: TextDirection.ltr,
-                    textAlign: TextAlign.right,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'العملية الحسابية',
-                      hintText: 'مثال: 100+50*2',
-                      prefixIcon: Icon(Icons.functions),
-                    ),
-                    onChanged: (value) => expression = value,
-                    onSubmitted: (_) {
-                      final value = CalculatorEngine.evaluate(expression);
-                      if (value != null) Navigator.of(dialogContext).pop(value);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'النتيجة: ' + _calculatorResultText(expression),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final key in const ['7','8','9','÷','4','5','6','×','1','2','3','-','0','.','+','⌫'])
-                        SizedBox(
-                          width: 58,
-                          height: 44,
-                          child: OutlinedButton(
-                            onPressed: () {
-                              var value = controller.text;
-                              if (key == '⌫') {
-                                if (value.isNotEmpty) value = value.substring(0, value.length - 1);
-                              } else {
-                                value += key;
-                              }
-                              controller.text = value;
-                              controller.selection = TextSelection.collapsed(offset: value.length);
-                              expression = value;
-                              setDialogState(() {});
-                            },
-                            child: Text(key, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            controller.clear();
-                            expression = '';
-                            setDialogState(() {});
-                          },
-                          icon: const Icon(Icons.clear),
-                          label: const Text('مسح'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            final value = CalculatorEngine.evaluate(expression);
-                            if (value != null) Navigator.of(dialogContext).pop(value);
-                          },
-                          icon: const Icon(Icons.check),
-                          label: const Text('إدخال المبلغ'),
-                        ),
-                      ),
-                    ],
+          builder: (context, setDialogState) => Dialog.fullscreen(
+            child: Scaffold(
+              appBar: AppBar(
+                title: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calculate_outlined),
+                    SizedBox(width: 8),
+                    Text('آلة حاسبة'),
+                  ],
+                ),
+                actions: [
+                  IconButton(
+                    tooltip: 'إغلاق',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(dialogContext).pop(),
                   ),
                 ],
+              ),
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.right,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'العملية الحسابية',
+                          hintText: 'مثال: 100+50*2',
+                          prefixIcon: Icon(Icons.functions),
+                        ),
+                        onChanged: (value) => setDialogState(() => expression = value),
+                        onSubmitted: (_) {
+                          final value = CalculatorEngine.evaluate(expression);
+                          if (value != null) Navigator.of(dialogContext).pop(value);
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'النتيجة: ' + _calculatorResultText(expression),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = (constraints.maxWidth - 18) / 4;
+                          return Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final key in const ['7','8','9','÷','4','5','6','×','1','2','3','-','0','.','+','⌫'])
+                                SizedBox(
+                                  width: width,
+                                  height: 58,
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      var value = controller.text;
+                                      if (key == '⌫') {
+                                        if (value.isNotEmpty) value = value.substring(0, value.length - 1);
+                                      } else {
+                                        value += key;
+                                      }
+                                      controller.text = value;
+                                      controller.selection = TextSelection.collapsed(offset: value.length);
+                                      expression = value;
+                                      setDialogState(() {});
+                                    },
+                                    child: Text(key, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                controller.clear();
+                                expression = '';
+                                setDialogState(() {});
+                              },
+                              icon: const Icon(Icons.clear),
+                              label: const Text('مسح'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                final value = CalculatorEngine.evaluate(expression);
+                                if (value != null) Navigator.of(dialogContext).pop(value);
+                              },
+                              icon: const Icon(Icons.check),
+                              label: const Text('إدخال المبلغ'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -278,11 +297,6 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
       amount.text = _trimNumber(result);
       setState(() {});
     }
-  }
-
-  String _calculatorResultText(String expression) {
-    final value = CalculatorEngine.evaluate(expression);
-    return value == null ? '—' : _trimNumber(value);
   }
 
   Widget _accountField() {
