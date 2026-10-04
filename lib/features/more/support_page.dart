@@ -11,36 +11,14 @@ class SupportPage extends ConsumerStatefulWidget {
 }
 
 class _SupportPageState extends ConsumerState<SupportPage> {
-  List<Map<String, dynamic>> accounts = const [];
-  String? selectedAccountId;
-  bool loading = true;
+  bool loading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadAccounts();
-  }
-
-  Future<void> _loadAccounts() async {
-    final rows = await ref.read(repositoryProvider).accounts();
-    if (!mounted) return;
-    setState(() {
-      accounts = rows.map((a) => <String, dynamic>{'id': a.id, 'name': a.name}).toList();
-      if (accounts.isNotEmpty) selectedAccountId = accounts.first['id'] as String;
-      loading = false;
-    });
-  }
-
-  String get selectedName {
-    for (final a in accounts) {
-      if (a['id'] == selectedAccountId) return (a['name'] as String?)?.trim() ?? '';
-    }
-    return '';
-  }
 
   Future<void> _openWhatsApp() async {
-    final customer = selectedName.isEmpty ? 'العميل' : selectedName;
-    final text = 'السلام عليكم ورحمة الله وبركاته\n$customer لدي استفسار حول تطبيق دفتر برو';
+    final profile = await ref.read(repositoryProvider).userProfile();
+    final userName = (profile['user_name'] ?? '').toString().trim();
+    final sender = userName.isEmpty ? 'المستخدم' : userName;
+    final text = 'السلام عليكم ورحمة الله وبركاته\n$sender لدي استفسار حول تطبيق دفتر برو';
     final uri = Uri.parse('https://wa.me/967714692465?text=${Uri.encodeComponent(text)}');
     await _open(uri, 'تعذر فتح واتساب');
   }
@@ -74,21 +52,21 @@ class _SupportPageState extends ConsumerState<SupportPage> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                if (accounts.isNotEmpty) ...[
-                  const SectionTitle(title: 'اسم العميل في رسالة واتساب'),
-                  DropdownButtonFormField<String>(
-                    value: selectedAccountId,
-                    decoration: const InputDecoration(prefixIcon: Icon(Icons.person_outline), labelText: 'اختر العميل'),
-                    items: accounts.map((a) => DropdownMenuItem<String>(value: a['id'] as String, child: Text(a['name'] as String))).toList(),
-                    onChanged: (value) => setState(() => selectedAccountId = value),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 _contactButton(Icons.chat_rounded, 'واتساب', 'التواصل عبر WhatsApp', _openWhatsApp),
                 const SizedBox(height: 10),
                 _contactButton(Icons.send_rounded, 'تيليجرام', 'فتح حساب المطوّر على Telegram', () => _open(Uri.parse('https://t.me/S7m_5'), 'تعذر فتح تيليجرام')),
                 const SizedBox(height: 10),
                 _contactButton(Icons.camera_alt_rounded, 'إنستجرام', 'فتح حساب المطوّر على Instagram', () => _open(Uri.parse('https://www.instagram.com/sa.me_er?stkn=MWhzc2NwNXVzcnZ6Ng=='), 'تعذر فتح إنستجرام')),
+                const SizedBox(height: 10),
+                _contactButton(
+                  Icons.language_rounded,
+                  'زورنا على موقعنا',
+                  'زيارة الموقع الرسمي لهلوسات أفكار',
+                  () => _open(
+                    Uri.parse('https://halosat-afkar-1jm1qvdj4-alhosamesameer-sys.vercel.app'),
+                    'تعذر فتح الموقع',
+                  ),
+                ),
               ],
             ),
     );
