@@ -220,7 +220,7 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: Text(
-                          'النتيجة: ' + _calculatorResultText(expression),
+                          'النتيجة: ' + (CalculatorEngine.evaluate(expression)?.toString() ?? '—'),
                           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                         ),
                       ),
