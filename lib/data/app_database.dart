@@ -68,8 +68,8 @@ class AppDatabase {
     final args=<Object?>[];
     if(accountId!=null){where.add('account_id=?');args.add(accountId);}
     if(query.trim().isNotEmpty){where.add('(note LIKE ? OR category LIKE ?)');final q='%${query.trim()}%';args.addAll([q,q]);}
-    if(from!=null){where.add('date>=?');args.add(DateTime(from!.year,from!.month,from!.day).millisecondsSinceEpoch);}
-    if(to!=null){where.add('date<?');args.add(DateTime(to!.year,to!.month,to!.day+1).millisecondsSinceEpoch);}
+    if(from!=null){where.add('date>=?');args.add(DateTime(from.year,from.month,from.day).millisecondsSinceEpoch);}
+    if(to!=null){where.add('date<?');args.add(DateTime(to.year,to.month,to.day+1).millisecondsSinceEpoch);}
     final rows=await d.query('transactions',where:where.join(' AND '),whereArgs:args,orderBy:'date DESC',limit:limit,offset:offset);
     return rows.map(TransactionItem.fromMap).toList();
   }
@@ -126,7 +126,6 @@ class AppDatabase {
       await txn.update('currencies',{'is_base':1},where:'code=?',whereArgs:[target]);
       for(final row in rows){
         final id=row['id'] as String;
-        final source=(row['currency'] as String?)??oldBase;
         final amount=(row['amount'] as num?)?.toDouble()??0;
         final baseAmount=converted[id]??amount;
         final rate=amount==0?1:baseAmount/amount;
