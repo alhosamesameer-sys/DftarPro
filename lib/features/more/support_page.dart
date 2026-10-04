@@ -63,7 +63,7 @@ class _SupportPageState extends ConsumerState<SupportPage> {
                   'زورنا على موقعنا',
                   'زيارة الموقع الرسمي لهلوسات أفكار',
                   () => _open(
-                    Uri.parse('https://halosat-afkar-1jm1qvdj4-alhosamesameer-sys.vercel.app'),
+                    Uri.parse('https://halosat-afkar-ndzev9nu8-alhosamesameer-sys.vercel.app/index.html'),
                     'تعذر فتح الموقع',
                   ),
                 ),
