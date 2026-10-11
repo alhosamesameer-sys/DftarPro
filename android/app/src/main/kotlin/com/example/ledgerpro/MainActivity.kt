@@ -107,19 +107,31 @@ class MainActivity : FlutterFragmentActivity() {
                     val file = File(path)
                     if (phone.isBlank() || !file.exists()) throw IllegalArgumentException("رقم العميل أو الملف غير صالح")
                     val uri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".fileprovider", file)
-                    val pkg = if (business) "com.whatsapp.w4b" else "com.whatsapp"
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = mimeType
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        putExtra(Intent.EXTRA_TEXT, "كشف حساب")
-                        putExtra("jid", "$phone@s.whatsapp.net")
-                        setPackage(pkg)
-                        clipData = android.content.ClipData.newUri(contentResolver, file.name, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Build one share target per installed WhatsApp app so the user can choose
+                    // between WhatsApp Messenger and WhatsApp Business when both are installed.
+                    val packages = listOf("com.whatsapp", "com.whatsapp.w4b")
+                    val targets = packages.mapNotNull { pkg ->
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = mimeType
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            putExtra(Intent.EXTRA_TEXT, "كشف حساب")
+                            putExtra("jid", "$phone@s.whatsapp.net")
+                            setPackage(pkg)
+                            clipData = android.content.ClipData.newUri(contentResolver, file.name, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }.takeIf { it.resolveActivity(packageManager) != null }
                     }
-                    if (intent.resolveActivity(packageManager) == null) throw IllegalStateException("واتساب غير مثبت أو غير متاح")
-                    startActivity(intent)
+                    if (targets.isEmpty()) throw IllegalStateException("واتساب أو واتساب للأعمال غير مثبت")
+                    if (targets.size == 1) {
+                        startActivity(targets.first())
+                    } else {
+                        val chooser = Intent.createChooser(targets.first(), "اختر تطبيق واتساب")
+                        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, targets.drop(1).toTypedArray())
+                        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(chooser)
+                    }
                     result.success(true)
                     return@setMethodCallHandler
                 }
