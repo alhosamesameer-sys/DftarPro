@@ -43,7 +43,7 @@ class StatementExportService {
     final rows = items.map((e) {
       final note = e.note.trim().isEmpty ? (e.category.trim().isEmpty ? 'عملية' : e.category.trim()) : e.note.trim();
       final amount = '${_money(e.amount)} ${e.currency}';
-      final equivalent = e.currency == base ? '' : '<br><span class="sub">ما يعادل ${_escape('${_money(e.baseAmount)} ${e.baseCurrency}')}</span>';
+      final equivalent = e.currency == base ? '' : '<br><span class="sub">ما يعادل ${_money(e.baseAmount)} ${_escape(e.baseCurrency)}</span>';
       final kind = e.type == 'credit' ? 'له' : 'عليه';
       return '''<tr><td>${_escape(_date(e.date))}</td><td>${_escape(note)}</td><td class="kind">$kind</td><td>${_escape(amount)}$equivalent</td></tr>''';
     }).join();
