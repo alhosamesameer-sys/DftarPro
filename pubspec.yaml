@@ -33,6 +33,12 @@ dependencies:
   http: ^1.3.0
   flutter_local_notifications: ^18.0.1
 
+dependency_overrides:
+  # image 4.11.0 currently calls archive's decodeLazy API, which is absent
+  # from the archive 4.0.9 selected by pub on the release runner.
+  # Keep the compatible image release until the transitive packages align.
+  image: 4.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
