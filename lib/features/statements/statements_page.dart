@@ -106,6 +106,17 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
     return lines.join('\n');
   }
 
+  String _normalizedPhone(String raw) {
+    var phone = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phone.isEmpty) return '';
+    if (!raw.trim().startsWith('+') && phone.startsWith('0')) {
+      phone = '967' + phone.substring(1);
+    } else if (!raw.trim().startsWith('+') && !phone.startsWith('967')) {
+      phone = '967' + phone;
+    }
+    return phone;
+  }
+
   Future<void> _shareOptions(BuildContext context, Account account, String base) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -129,10 +140,17 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
       final debit = all.where((x) => x.type == 'debit').fold<double>(0, (s, x) => s + x.baseAmount);
       final net = credit - debit;
       final profile = await ref.read(repositoryProvider).userProfile();
-      if (choice == 'pdf') {
-        await ref.read(pdfProvider).share(account, all, net, profile: profile);
-      } else if (choice == 'word') {
-        await ref.read(pdfProvider).shareWord(account, all, net, profile);
+      if (choice == 'pdf' || choice == 'word') {
+        final phone = _normalizedPhone(account.phone);
+        if (phone.isEmpty) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أضف رقم هاتف العميل أولاً لمشاركة الملف معه عبر واتساب')));
+          return;
+        }
+        if (choice == 'pdf') {
+          await ref.read(pdfProvider).sharePdfToWhatsApp(account, all, net, profile: profile, phone: phone);
+        } else {
+          await ref.read(pdfProvider).shareWordToWhatsApp(account, all, net, profile, phone: phone);
+        }
       } else {
         final method = await showModalBottomSheet<String>(
           context: context,
@@ -146,14 +164,14 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
         );
         if (method == null || !mounted) return;
         final message = _statementText(account, all, base);
-        final phone = account.phone.replaceAll(RegExp(r'[^0-9]'), '');
+        final phone = _normalizedPhone(account.phone);
         if (phone.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد رقم هاتف مسجل لهذا العميل')));
           return;
         }
         final uri = method == 'whatsapp'
             ? Uri.https('wa.me', '/$phone', {'text': message})
-            : Uri(scheme: 'sms', path: account.phone, queryParameters: {'body': message});
+            : Uri(scheme: 'sms', path: phone, queryParameters: {'body': message});
         if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر فتح تطبيق المراسلة')));
         }
