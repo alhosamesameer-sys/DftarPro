@@ -195,7 +195,7 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
             Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(children:[
               Text('إجمالي له: ${money(credit,base)}'),
               Text('إجمالي عليه: ${money(debit,base)}'),
-              Text('الصافي: ${money(net.abs(),base)} ${net>=0?'له':'عليه'}',style:const TextStyle(fontWeight:FontWeight.bold)),
+              Text(net.abs()<0.000001?'الحساب متعادل':'الصافي: ${money(net.abs(),base)} ${net>0?'له':'عليه'}',style:const TextStyle(fontWeight:FontWeight.bold)),
             ]))),
             Row(children:[
               Expanded(child:OutlinedButton.icon(onPressed:()=>_pickRange(),icon:const Icon(Icons.date_range),label:Text(from==null?'فلترة بالتاريخ':'${dateAr(from!)} - ${dateAr(to!)}'))),
