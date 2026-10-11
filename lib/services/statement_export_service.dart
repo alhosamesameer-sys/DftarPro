@@ -124,7 +124,8 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
 
   Future<void> sharePdfToWhatsApp(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile, required String phone}) async {
     final bytes = await buildPdf(account, items, balance, profile: profile);
-    final dir = await getTemporaryDirectory();
+    final dir = Directory('${(await getTemporaryDirectory()).path}/statements');
+    await dir.create(recursive: true);
     final file = File('${dir.path}/كشف_حساب_${account.id}.pdf');
     await file.writeAsBytes(bytes, flush: true);
     final opened = await _nativePdf.invokeMethod<bool>('shareStatementToWhatsApp', {
@@ -151,7 +152,8 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
   }
 
   Future<void> shareWordToWhatsApp(Account account, List<TransactionItem> items, double balance, Map<String, String> profile, {required String phone}) async {
-    final dir = await getTemporaryDirectory();
+    final dir = Directory('${(await getTemporaryDirectory()).path}/statements');
+    await dir.create(recursive: true);
     final html = await buildHtml(account, items, balance, profile: profile);
     final safe = account.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final file = File('${dir.path}/كشف_حساب_$safe.doc');
