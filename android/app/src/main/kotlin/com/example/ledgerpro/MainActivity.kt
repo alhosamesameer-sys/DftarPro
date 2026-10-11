@@ -383,7 +383,7 @@ class MainActivity : FlutterFragmentActivity() {
             .sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
         val debit = transactions.filter { it["type"]?.toString() == "debit" }
             .sumOf { (it["baseAmount"] as? Number)?.toDouble() ?: 0.0 }
-        val netLabel = if (balance >= 0) "له" else "عليه"
+        val netLabel = if (kotlin.math.abs(balance) < 0.000001) "الحساب متعادل" else if (balance > 0) "له" else "عليه"
 
         ensure(105f)
         drawCustomerTable()
@@ -425,7 +425,7 @@ class MainActivity : FlutterFragmentActivity() {
                 cellRtl(date, x4, rowTop, x5, rowHeight, 7.2f)
                 cellRtl(note.take(28), x3, rowTop, x4, rowHeight, 7.2f)
                 cellRtl(type, x2, rowTop, x3, rowHeight, 7.5f, true)
-                cellRtl(money(amount) + " " + currency + "\n" + money(baseAmount) + " " + base, margin, rowTop, x2, rowHeight, 7.1f)
+                cellRtl(if (currency == base) money(amount) + " " + currency else money(amount) + " " + currency + "\nما يعادل " + money(baseAmount) + " " + base, margin, rowTop, x2, rowHeight, 7.1f)
                 y = rowBottom
             }
         }
