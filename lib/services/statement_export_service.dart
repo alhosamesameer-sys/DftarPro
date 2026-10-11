@@ -43,12 +43,12 @@ class StatementExportService {
     final rows = items.map((e) {
       final note = e.note.trim().isEmpty ? (e.category.trim().isEmpty ? 'عملية' : e.category.trim()) : e.note.trim();
       final amount = '${_money(e.amount)} ${e.currency}';
-      final equivalent = '${_money(e.baseAmount)} ${e.baseCurrency}';
+      final equivalent = e.currency == base ? '' : '<br><span class="sub">ما يعادل ${_escape('${_money(e.baseAmount)} ${e.baseCurrency}')}</span>';
       final kind = e.type == 'credit' ? 'له' : 'عليه';
-      return '''<tr><td>${_escape(_date(e.date))}</td><td>${_escape(note)}</td><td class="kind">$kind</td><td>${_escape(amount)}<br><span class="sub">${_escape(equivalent)}</span></td></tr>''';
+      return '''<tr><td>${_escape(_date(e.date))}</td><td>${_escape(note)}</td><td class="kind">$kind</td><td>${_escape(amount)}$equivalent</td></tr>''';
     }).join();
 
-    final netLabel = balance >= 0 ? 'له' : 'عليه';
+    final netLabel = balance.abs() < 0.000001 ? 'الحساب متعادل' : balance > 0 ? 'له' : 'عليه';
     return '''<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="ar" dir="rtl">
 <head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><title>كشف حساب</title>
