@@ -97,8 +97,32 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pdfChannel).setMethodCallHandler { call, result ->
-            if (call.method != "createStatementPdf" && call.method != "openStatementPdf") { result.notImplemented(); return@setMethodCallHandler }
+            if (call.method != "createStatementPdf" && call.method != "openStatementPdf" && call.method != "shareStatementToWhatsApp") { result.notImplemented(); return@setMethodCallHandler }
             try {
+                if (call.method == "shareStatementToWhatsApp") {
+                    val path = call.argument<String>("path") ?: throw IllegalArgumentException("مسار الملف غير موجود")
+                    val phone = call.argument<String>("phone") ?: ""
+                    val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
+                    val business = call.argument<Boolean>("business") ?: false
+                    val file = File(path)
+                    if (phone.isBlank() || !file.exists()) throw IllegalArgumentException("رقم العميل أو الملف غير صالح")
+                    val uri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".fileprovider", file)
+                    val pkg = if (business) "com.whatsapp.w4b" else "com.whatsapp"
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = mimeType
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_TEXT, "كشف حساب")
+                        putExtra("jid", "$phone@s.whatsapp.net")
+                        setPackage(pkg)
+                        clipData = android.content.ClipData.newUri(contentResolver, file.name, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (intent.resolveActivity(packageManager) == null) throw IllegalStateException("واتساب غير مثبت أو غير متاح")
+                    startActivity(intent)
+                    result.success(true)
+                    return@setMethodCallHandler
+                }
                 val account = call.argument<Map<String, Any?>>("account") ?: emptyMap()
                 val profile = call.argument<Map<String, Any?>>("profile") ?: emptyMap()
                 val transactions = call.argument<List<Map<String, Any?>>>("transactions") ?: emptyList()
