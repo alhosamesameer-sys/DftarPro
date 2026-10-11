@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/models.dart';
@@ -75,6 +76,94 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
     )));
   }
 
+  String _statementText(Account account, List<TransactionItem> all, String base) {
+    final credit = all.where((x) => x.type == 'credit').fold<double>(0, (s, x) => s + x.baseAmount);
+    final debit = all.where((x) => x.type == 'debit').fold<double>(0, (s, x) => s + x.baseAmount);
+    final net = credit - debit;
+    final lines = <String>[
+      'السلام عليكم ورحمة الله وبركاته',
+      '',
+      'كشف حساب العميل',
+      'اسم العميل: ${account.name}',
+      if (from != null && to != null) 'الفترة: ${dateAr(from!)} إلى ${dateAr(to!)}' else 'الفترة: جميع العمليات',
+      '',
+      'إجمالي المبالغ لك: ${money(credit, base)}',
+      'إجمالي المبالغ عليك: ${money(debit, base)}',
+      net.abs() < 0.000001
+          ? 'الحساب متعادل'
+          : 'الصافي ${net > 0 ? 'لك' : 'عليك'}: ${money(net.abs(), base)}',
+      '',
+      'تفاصيل العمليات:',
+    ];
+    if (all.isEmpty) {
+      lines.add('لا توجد عمليات في الفترة المحددة.');
+    } else {
+      for (final x in all) {
+        final note = x.note.trim().isEmpty ? x.category : x.note.trim();
+        lines.add('${dateAr(x.date)} | ${x.type == 'credit' ? 'لك' : 'عليك'} | ${money(x.amount, x.currency)}${x.currency == base ? '' : ' (ما يعادل ${money(x.baseAmount, base)})'} | $note');
+      }
+    }
+    lines.addAll(['', 'شكراً لتعاملكم معنا.', 'دفتربرو — دفتر حساباتك بسهولة']);
+    return lines.join('\n');
+  }
+
+  Future<void> _shareOptions(BuildContext context, Account account, String base) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('مشاركة كشف الحساب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          ListTile(leading: const Icon(Icons.picture_as_pdf, color: Colors.red), title: const Text('مشاركة PDF'), onTap: () => Navigator.pop(sheetContext, 'pdf')),
+          ListTile(leading: const Icon(Icons.description_outlined, color: Colors.blue), title: const Text('مشاركة ملف Word'), onTap: () => Navigator.pop(sheetContext, 'word')),
+          ListTile(leading: const Icon(Icons.message_outlined, color: Colors.teal), title: const Text('مشاركة نص'), onTap: () => Navigator.pop(sheetContext, 'text')),
+        ]),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      final all = await _loadAllForExport();
+      final credit = all.where((x) => x.type == 'credit').fold<double>(0, (s, x) => s + x.baseAmount);
+      final debit = all.where((x) => x.type == 'debit').fold<double>(0, (s, x) => s + x.baseAmount);
+      final net = credit - debit;
+      final profile = await ref.read(repositoryProvider).userProfile();
+      if (choice == 'pdf') {
+        await ref.read(pdfProvider).share(account, all, net, profile: profile);
+      } else if (choice == 'word') {
+        await ref.read(pdfProvider).shareWord(account, all, net, profile);
+      } else {
+        final method = await showModalBottomSheet<String>(
+          context: context,
+          showDragHandle: true,
+          builder: (sheetContext) => SafeArea(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              ListTile(leading: const Icon(Icons.chat, color: Colors.green), title: const Text('رسالة واتساب'), onTap: () => Navigator.pop(sheetContext, 'whatsapp')),
+              ListTile(leading: const Icon(Icons.sms_outlined), title: const Text('رسالة SMS عادية'), onTap: () => Navigator.pop(sheetContext, 'sms')),
+            ]),
+          ),
+        );
+        if (method == null || !mounted) return;
+        final message = _statementText(account, all, base);
+        final phone = account.phone.replaceAll(RegExp(r'[^0-9]'), '');
+        if (phone.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد رقم هاتف مسجل لهذا العميل')));
+          return;
+        }
+        final uri = method == 'whatsapp'
+            ? Uri.https('wa.me', '/$phone', {'text': message})
+            : Uri(scheme: 'sms', path: account.phone, queryParameters: {'body': message});
+        if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر فتح تطبيق المراسلة')));
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذرت مشاركة كشف الحساب: $e')));
+    }
+  }
+
   Widget _content(BuildContext context,Account account,String base){
     return FutureBuilder<Map<String,double>>(
       future:ref.read(repositoryProvider).accountBaseTotals(widget.accountId,base),
@@ -103,9 +192,7 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
               Expanded(child:OutlinedButton.icon(onPressed:()async{final all=await _loadAllForExport();final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).openStatement(account,all,net,profile:p);},icon:const Icon(Icons.picture_as_pdf),label:const Text('PDF'))),
             ]),
             const SizedBox(height:8),
-            FilledButton.icon(onPressed:()async{final all=await _loadAllForExport();final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).shareWord(account,all,net,p);},icon:const Icon(Icons.description),label:const Text('Word')),
-            const SizedBox(height:8),
-            FilledButton.icon(onPressed:()async{final all=await _loadAllForExport();final b=StringBuffer('كشف حساب ${account.name}\n');b.writeln('الصافي: ${money(net,base)}');for(final x in all)b.writeln('${dateAr(x.date)} - ${x.type=='credit'?'له':'عليه'}: ${money(x.amount,x.currency)} = ${money(x.baseAmount,x.baseCurrency)}');await SharePlus.instance.share(ShareParams(text:b.toString()));},icon:const Icon(Icons.share),label:const Text('مشاركة كنص')),
+            OutlinedButton.icon(onPressed:() => _shareOptions(context, account, base),icon:const Icon(Icons.share),label:const Text('مشاركة')),
             const SizedBox(height:16),
             SectionTitle(title:'سجل العمليات (${items.length}${hasMore?' +':''})'),
             if(loading)const Padding(padding:EdgeInsets.all(28),child:Center(child:CircularProgressIndicator())),
