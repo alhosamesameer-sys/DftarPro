@@ -204,9 +204,9 @@ class _StatementsPageState extends ConsumerState<StatementsPage> {
             ]),
             const SizedBox(height:8),
             Row(children:[
-              Expanded(child:OutlinedButton.icon(onPressed:()async{final all=await _loadAllForExport();final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).printStatement(account,all,net,profile:p);},icon:const Icon(Icons.print),label:const Text('طباعة'))),
+              Expanded(child:OutlinedButton.icon(onPressed:()async{final all=await _loadAllForExport();final credit=all.where((x)=>x.type=='credit').fold<double>(0,(s,x)=>s+x.baseAmount);final debit=all.where((x)=>x.type=='debit').fold<double>(0,(s,x)=>s+x.baseAmount);final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).printStatement(account,all,credit-debit,profile:p);},icon:const Icon(Icons.print),label:const Text('طباعة'))),
               const SizedBox(width:8),
-              Expanded(child:OutlinedButton.icon(onPressed:()async{final all=await _loadAllForExport();final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).openStatement(account,all,net,profile:p);},icon:const Icon(Icons.picture_as_pdf),label:const Text('PDF'))),
+              Expanded(child:OutlinedButton.icon(onPressed:()async{final all=await _loadAllForExport();final credit=all.where((x)=>x.type=='credit').fold<double>(0,(s,x)=>s+x.baseAmount);final debit=all.where((x)=>x.type=='debit').fold<double>(0,(s,x)=>s+x.baseAmount);final p=await ref.read(repositoryProvider).userProfile();await ref.read(pdfProvider).openStatement(account,all,credit-debit,profile:p);},icon:const Icon(Icons.picture_as_pdf),label:const Text('PDF'))),
             ]),
             const SizedBox(height:8),
             OutlinedButton.icon(onPressed:() => _shareOptions(context, account, base),icon:const Icon(Icons.share),label:const Text('مشاركة')),
