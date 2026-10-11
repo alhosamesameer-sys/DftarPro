@@ -36,8 +36,9 @@ dependencies:
 dependency_overrides:
   # image 4.11.0 currently calls archive's decodeLazy API, which is absent
   # from the archive 4.0.9 selected by pub on the release runner.
-  # image 4.9.1 is compatible with archive 4.0.9 and avoids the missing API.
-  image: 4.9.1
+  # image 4.7.1 is compatible with Dart 3.9 and archive 4.0.9; newer
+  # releases call archive APIs unavailable in the current Flutter toolchain.
+  image: 4.7.1
 
 dev_dependencies:
   flutter_test:
