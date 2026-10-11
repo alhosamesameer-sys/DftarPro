@@ -153,7 +153,7 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
   Future<void> shareWordToWhatsApp(Account account, List<TransactionItem> items, double balance, Map<String, String> profile, {required String phone}) async {
     final dir = await getTemporaryDirectory();
     final html = await buildHtml(account, items, balance, profile: profile);
-    final safe = account.name.replaceAll(RegExp(r'[\\\\/:*?"<>|]'), '_');
+    final safe = account.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final file = File('${dir.path}/كشف_حساب_$safe.doc');
     await file.writeAsString(html, encoding: utf8, flush: true);
     final opened = await _nativePdf.invokeMethod<bool>('shareStatementToWhatsApp', {
