@@ -122,6 +122,20 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
     await SharePlus.instance.share(ShareParams(files:[XFile(file.path,mimeType:'application/pdf')],text:'كشف حساب ${account.name}'));
   }
 
+  Future<void> sharePdfToWhatsApp(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile, required String phone}) async {
+    final bytes = await buildPdf(account, items, balance, profile: profile);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/كشف_حساب_${account.id}.pdf');
+    await file.writeAsBytes(bytes, flush: true);
+    final opened = await _nativePdf.invokeMethod<bool>('shareStatementToWhatsApp', {
+      'path': file.path,
+      'phone': phone,
+      'mimeType': 'application/pdf',
+      'business': false,
+    });
+    if (opened != true) throw StateError('تعذر فتح واتساب لمشاركة ملف PDF');
+  }
+
   Future<void> openStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
     await _nativePdf.invokeMethod<String>('openStatementPdf', {
       'account': _accountMap(account),
@@ -134,6 +148,21 @@ ${rows.isEmpty ? '<tr><td colspan="4">لا توجد عمليات مسجلة في
   Future<void> printStatement(Account account, List<TransactionItem> items, double balance, {Map<String, String>? profile}) async {
     final bytes = await buildPdf(account, items, balance, profile: profile);
     await Printing.layoutPdf(onLayout: (_) async => bytes, name:'كشف_حساب_${account.id}.pdf');
+  }
+
+  Future<void> shareWordToWhatsApp(Account account, List<TransactionItem> items, double balance, Map<String, String> profile, {required String phone}) async {
+    final dir = await getTemporaryDirectory();
+    final html = await buildHtml(account, items, balance, profile: profile);
+    final safe = account.name.replaceAll(RegExp(r'[\\\\/:*?"<>|]'), '_');
+    final file = File('${dir.path}/كشف_حساب_$safe.doc');
+    await file.writeAsString(html, encoding: utf8, flush: true);
+    final opened = await _nativePdf.invokeMethod<bool>('shareStatementToWhatsApp', {
+      'path': file.path,
+      'phone': phone,
+      'mimeType': 'application/msword',
+      'business': false,
+    });
+    if (opened != true) throw StateError('تعذر فتح واتساب لمشاركة ملف Word');
   }
 
   Future<void> shareWord(Account account, List<TransactionItem> items, double balance, Map<String, String> profile) async {
