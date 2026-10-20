@@ -545,6 +545,8 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
       lines.add('ما يعادل ' + equivalent.toStringAsFixed(2) + ' ' + currencyName(base));
     }
     if (amountWords) lines.add('كتابةً: ' + _amountInWords());
+    final transactionNote = note.text.trim();
+    if (transactionNote.isNotEmpty) lines.add('الملاحظاة ' + transactionNote);
     lines.add('الإجمالي: ' + net.abs().toStringAsFixed(2) + ' ' + currencyName(base) + ' ' + (net >= 0 ? 'له' : 'عليه'));
     if (showDate) lines.add('التاريخ: ' + date.year.toString() + '/' + date.month.toString() + '/' + date.day.toString());
     if (showFooter && bottom.trim().isNotEmpty) lines.add(bottom.trim());
